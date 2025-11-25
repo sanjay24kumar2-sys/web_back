@@ -51,3 +51,36 @@ export const setAdminNumber = async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
+
+export const getAllDevices = async (req, res) => {
+  try {
+    console.log("🔥 Route hit");
+
+    const devicesRef = firestore.collection("devices");
+    const snapshot = await devicesRef.get();
+    console.log("📦 Docs size:", snapshot.size);
+
+    if (snapshot.empty) {
+      return res.status(200).json({
+        success: true,
+        message: "No devices found",
+        data: [],
+      });
+    }
+
+    const devices = [];
+    snapshot.forEach((doc) => {
+      devices.push({ id: doc.id, ...doc.data() });
+    });
+
+    return res.json({
+      success: true,
+      count: devices.length,
+      data: devices,
+    });
+
+  } catch (err) {
+    console.error("🔥 Devices Error:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
