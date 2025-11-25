@@ -14,13 +14,13 @@ const serviceAccount = {
   client_id: process.env.FIREBASE_CLIENT_ID,
 };
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: process.env.FIREBASE_DB_URL,
-});
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+}
 
-console.log(" Firebase Admin Connected Successfully");
+console.log("🔥 Firebase Admin Connected Successfully (Firestore + FCM)");
 
 export const firestore = admin.firestore();
-export const rtdb = admin.database();
 export const fcm = admin.messaging();

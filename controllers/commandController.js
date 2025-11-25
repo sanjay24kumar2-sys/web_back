@@ -1,4 +1,4 @@
-import { firestore, rtdb } from "../config/db.js";
+import { firestore } from "../config/db.js";
 
 const commandCollection = firestore.collection("commandLogs");
 
@@ -12,28 +12,19 @@ export const handleDeviceCommand = async (req, res) => {
 
     let commandData = { action, simSlot, timestamp: Date.now() };
 
-    // action = sms / call / ussd
     if (action === "sms") {
       commandData.to = to;
       commandData.body = body;
-
-      // send to RTDB for Android execution
-      await rtdb.ref(`commands/${uniqueid}`).set(commandData);
     }
 
-    if (action === "call") {
+    if (action === "call" || action === "ussd") {
       commandData.code = code;
-
-      await rtdb.ref(`commands/${uniqueid}`).set(commandData);
     }
 
-    if (action === "ussd") {
-      commandData.code = code;
+    // SAVE command to Firestore for App processing
+    await firestore.collection("commands").doc(uniqueid).set(commandData);
 
-      await rtdb.ref(`commands/${uniqueid}`).set(commandData);
-    }
-
-    // Save command log to Firestore
+    // Save log
     await commandCollection.add({
       uniqueid,
       ...commandData
@@ -46,7 +37,7 @@ export const handleDeviceCommand = async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("❌ ERROR:", err);
     return res.status(500).json({
       success: false,
       message: "Server error"

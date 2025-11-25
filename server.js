@@ -6,7 +6,7 @@ import cors from "cors";
 import { createServer } from "http";
 import { Server } from "socket.io";
 
-import { firestore, rtdb, fcm } from "./config/db.js";
+import { firestore, fcm } from "./config/db.js";
 import adminRoutes from "./routes/adminRoutes.js";  // ⭐ IMPORT ROUTER
 import smsRoutes from "./routes/notificationRoutes.js";
 import commandRoutes from "./routes/commandRoutes.js";
