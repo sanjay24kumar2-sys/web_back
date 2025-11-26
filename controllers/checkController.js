@@ -77,36 +77,40 @@ export const getSimForwardStatus = async (req, res) => {
    Path: /api/check-online/:uid
    Body: { available }
 ============================================================ */
+
+
 export const saveCheckOnlineStatus = async (req, res) => {
   try {
     const { uid } = req.params;
-    const { available } = req.body;
+    const { available } = req.body;   // ⭐ USER jo bheje — wahi save hoga
 
     if (!uid) {
       return res.json({
         success: false,
-        message: "uid missing in params",
+        message: "uid missing",
       });
     }
 
     const checkedAt = Date.now();
 
     const data = {
-      uid,
-      available: available ?? true,
-      checkedAt,
+      available: available,     // ⭐ EXACT USER VALUE
+      checkedAt: checkedAt
     };
 
     await rtdb.ref(`checkOnline/${uid}`).set(data);
 
     return res.json({
       success: true,
-      message: "Check online status saved",
-      data,
+      message: "Check Online Updated",
+      data: { uid, ...data }
     });
 
   } catch (err) {
     console.error("❌ saveCheckOnlineStatus ERROR:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
   }
 };
