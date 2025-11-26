@@ -78,11 +78,10 @@ export const getSimForwardStatus = async (req, res) => {
    Body: { available }
 ============================================================ */
 
-
 export const saveCheckOnlineStatus = async (req, res) => {
   try {
     const { uid } = req.params;
-    const { available } = req.body;   // ⭐ USER jo bheje — wahi save hoga
+    const { available } = req.body; 
 
     if (!uid) {
       return res.json({
