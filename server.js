@@ -10,6 +10,8 @@ import { firestore, rtdb, fcm } from "./config/db.js";
 
 import adminRoutes from "./routes/adminRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
+import checkRoutes from "./routes/checkRoutes.js";
+
 import commandRoutes from "./routes/commandRoutes.js";
 
 const PORT = process.env.PORT || 5000;
@@ -335,6 +337,7 @@ refreshDevicesLive("initial");
 // ===============================
 app.use(adminRoutes);
 app.use(notificationRoutes);
+app.use("/api", checkRoutes);
 app.use(commandRoutes);
 
 app.get("/", (_, res) => {
