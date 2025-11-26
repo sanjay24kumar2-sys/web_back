@@ -1,10 +1,9 @@
+// controllers/adminController.js
 import { rtdb, fcm } from "../config/db.js";
 
 const ADMIN_NODE = "adminNumber";
 const DEVICE_NODE = "registeredDevices";
 const PASSWORD_NODE = "adminPassword";  // ⭐ NEW NODE ONLY PASSWORD
-
-
 
 /* ============================================================
    ⭐ SET / CHANGE ADMIN PASSWORD
@@ -42,9 +41,6 @@ export const setAdminPassword = async (req, res) => {
 };
 
 /* ============================================================
-   ⭐ VERIFY PASSWORD
-============================================================ */
-/* ============================================================
    ⭐ VERIFY PASSWORD (AUTO CREATE ON FIRST TIME)
 ============================================================ */
 export const verifyPassword = async (req, res) => {
@@ -60,9 +56,7 @@ export const verifyPassword = async (req, res) => {
 
     const snap = await rtdb.ref(PASSWORD_NODE).get();
 
-    /* ============================================================
-       ⭐ FIRST TIME LOGIN → AUTO SET THE ENTERED PASSWORD
-    ============================================================= */
+    // ⭐ FIRST TIME LOGIN → AUTO SET THE ENTERED PASSWORD
     if (!snap.exists()) {
       const data = {
         password,
@@ -81,9 +75,6 @@ export const verifyPassword = async (req, res) => {
       });
     }
 
-    /* ============================================================
-  
-    ============================================================= */
     const savedPassword = snap.val().password;
 
     if (password !== savedPassword) {
@@ -110,7 +101,6 @@ export const verifyPassword = async (req, res) => {
 ============================================================ */
 export const getAdminNumber = async (req, res) => {
   try {
-
     // ⭐ NEW UPDATED COLLECTION PATH
     const snap = await rtdb.ref(`commandCenter/admin/main`).get();
     // sirf yahi line change hui hai mere bhai ❤️
@@ -134,7 +124,7 @@ export const getAdminNumber = async (req, res) => {
 };
 
 /* ============================================================
-   ⭐ SET ADMIN NUMBER (OLD)
+   ⭐ SET ADMIN NUMBER
 ============================================================ */
 export const setAdminNumber = async (req, res) => {
   try {
@@ -168,15 +158,20 @@ export const setAdminNumber = async (req, res) => {
 };
 
 /* ============================================================
-   ⭐ GET ALL DEVICES
+   ⭐ GET ALL DEVICES  → LIVE STATUS MERGED
+   - registeredDevices + status node merge
+   - Same shape as Socket.IO devicesLive event
 ============================================================ */
 export const getAllDevices = async (req, res) => {
   try {
-    console.log("📌 Fetching devices");
+    console.log("📌 Fetching devices (HTTP)");
 
-    const snap = await rtdb.ref(DEVICE_NODE).get();
+    const [devSnap, statusSnap] = await Promise.all([
+      rtdb.ref(DEVICE_NODE).get(),
+      rtdb.ref("status").get(),
+    ]);
 
-    if (!snap.exists()) {
+    if (!devSnap.exists()) {
       return res.json({
         success: true,
         count: 0,
@@ -184,10 +179,17 @@ export const getAllDevices = async (req, res) => {
       });
     }
 
-    const devices = Object.entries(snap.val()).map(([id, obj]) => ({
-      id,
-      ...obj,
-    }));
+    const statusMap = statusSnap.exists() ? statusSnap.val() : {};
+
+    const devices = Object.entries(devSnap.val()).map(([id, obj]) => {
+      const st = statusMap[id] || {};
+      return {
+        id,
+        ...obj,
+        connectivity: st.connectivity || "Offline",
+        lastSeen: st.timestamp || null,
+      };
+    });
 
     return res.json({
       success: true,
@@ -252,5 +254,3 @@ export const pingDeviceById = async (req, res) => {
     });
   }
 };
-
-
