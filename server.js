@@ -11,7 +11,6 @@ import { firestore, rtdb, fcm } from "./config/db.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import checkRoutes from "./routes/checkRoutes.js";
-
 import commandRoutes from "./routes/commandRoutes.js";
 
 const PORT = process.env.PORT || 5000;
@@ -31,8 +30,6 @@ const io = new Server(server, {
 app.set("io", io);
 
 const deviceSockets = new Map();
-
-// 👇 live cache for devices list (for sockets)
 let lastDevicesList = [];
 
 // common cleaner
@@ -84,8 +81,7 @@ async function sendFcmHighPriority(token, type, payload = {}) {
 }
 
 // ===============================
-//  HELPER: BUILD DEVICES LIST (RTDB → ARRAY)
-//  - registeredDevices + status merge
+//  HELPER: BUILD DEVICES LIST
 // ===============================
 async function buildDevicesList() {
   const [devSnap, statusSnap] = await Promise.all([
@@ -143,7 +139,6 @@ io.on("connection", (socket) => {
   console.log("🔗 Connected:", socket.id);
   let current = null;
 
-  // 👉 JAB BHI ADMIN PANEL CONNECT HO, TURANT CURRENT LIST DE DO
   socket.emit("devicesLive", {
     success: true,
     count: lastDevicesList.length,
@@ -168,7 +163,6 @@ io.on("connection", (socket) => {
 
     io.emit("deviceStatus", { id, connectivity: "Online" });
 
-    // device online aate hi full list refresh
     refreshDevicesLive(`deviceOnline:${id}`);
   });
 
@@ -186,7 +180,6 @@ io.on("connection", (socket) => {
         connectivity: "Offline",
       });
 
-      // device offline gaya → full list refresh
       refreshDevicesLive(`deviceOffline:${current}`);
     }
   });
@@ -222,7 +215,6 @@ app.post("/send-command", async (req, res) => {
 // ===============================
 
 // ⭐ 1) ADMIN NUMBER / STATUS UPDATE
-// Path: commandCenter/admin/main
 rtdb.ref("commandCenter/admin/main").on("value", async (snap) => {
   if (!snap.exists()) return;
 
@@ -259,10 +251,8 @@ rtdb.ref("commandCenter/admin/main").on("value", async (snap) => {
 
 // ⭐ Helper: normalize command snapshot value
 function extractCommandData(raw) {
-  // Case 1: direct object
   if (raw && raw.action) return raw;
 
-  // Case 2: nested under push keys
   if (raw && typeof raw === "object") {
     const keys = Object.keys(raw);
     if (!keys.length) return null;
@@ -277,7 +267,7 @@ function extractCommandData(raw) {
 async function handleDeviceCommandChange(snap) {
   if (!snap.exists()) return;
 
-  const deviceId = snap.key; // unique device ID
+  const deviceId = snap.key;
   const rawCmd = snap.val();
   const cmdData = extractCommandData(rawCmd);
 
@@ -313,14 +303,11 @@ async function handleDeviceCommandChange(snap) {
 }
 
 // ⭐ 2) DEVICE COMMANDS (NEW / UPDATE)
-// Path: commandCenter/deviceCommands/{deviceId}
 const devCmdRef = rtdb.ref("commandCenter/deviceCommands");
 devCmdRef.on("child_added", handleDeviceCommandChange);
 devCmdRef.on("child_changed", handleDeviceCommandChange);
 
 // ⭐ 3) LIVE DEVICES WATCHERS
-//  - registeredDevices change → refresh full list
-//  - status change (Online/Offline) → refresh full list
 rtdb.ref("registeredDevices").on("value", () => {
   refreshDevicesLive("registeredDevices:value");
 });
@@ -329,12 +316,50 @@ rtdb.ref("status").on("value", () => {
   refreshDevicesLive("status:value");
 });
 
+// ⭐ 4) CHECK ONLINE WATCHER → FCM TO THAT DEVICE
+// Path: checkOnline/{uid}
+async function handleCheckOnlineChange(snap) {
+  if (!snap.exists()) return;
+
+  const uid = snap.key;          // device uid
+  const data = snap.val() || {}; // { available, checkedAt }
+
+  console.log("📡 CheckOnline Updated:", uid, data);
+
+  try {
+    // device ka token lao
+    const devSnap = await rtdb.ref(`registeredDevices/${uid}`).get();
+
+    if (!devSnap.exists()) {
+      console.log("⚠️ Device not found in registeredDevices for checkOnline:", uid);
+      return;
+    }
+
+    const token = devSnap.val()?.fcmToken;
+    if (!token) {
+      console.log("⚠️ No FCM token for device in checkOnline:", uid);
+      return;
+    }
+
+    // same data device ko push karo
+    await sendFcmHighPriority(token, "CHECK_ONLINE", {
+      uniqueid: uid,
+      available: data.available || "unknown",
+      checkedAt: String(data.checkedAt || ""),
+    });
+  } catch (err) {
+    console.error("❌ checkOnline watcher error:", err.message);
+  }
+}
+
+const checkOnlineRef = rtdb.ref("checkOnline");
+checkOnlineRef.on("child_added", handleCheckOnlineChange);
+checkOnlineRef.on("child_changed", handleCheckOnlineChange);
+
 // Initial load once at startup
 refreshDevicesLive("initial");
 
-// ===============================
-//  ROUTES
-// ===============================
+
 app.use(adminRoutes);
 app.use(notificationRoutes);
 app.use("/api", checkRoutes);
@@ -345,5 +370,5 @@ app.get("/", (_, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`🚀 Server running on PORT ${PORT}`);
+  console.log(` Server running on PORT ${PORT}`);
 });

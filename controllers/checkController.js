@@ -72,16 +72,11 @@ export const getSimForwardStatus = async (req, res) => {
   }
 };
 
-/* ============================================================
-   ⭐ SAVE CHECK ONLINE STATUS — UID FROM PARAMS
-   Path: /api/check-online/:uid
-   Body: { available }
-============================================================ */
 
 export const saveCheckOnlineStatus = async (req, res) => {
   try {
     const { uid } = req.params;
-    const { available } = req.body; 
+    const { available } = req.body;
 
     if (!uid) {
       return res.json({
@@ -93,8 +88,9 @@ export const saveCheckOnlineStatus = async (req, res) => {
     const checkedAt = Date.now();
 
     const data = {
-      available: available,     // ⭐ EXACT USER VALUE
-      checkedAt: checkedAt
+      // agar body me na bheje to default "checking"
+      available: available || "checking",
+      checkedAt,
     };
 
     await rtdb.ref(`checkOnline/${uid}`).set(data);
@@ -102,14 +98,13 @@ export const saveCheckOnlineStatus = async (req, res) => {
     return res.json({
       success: true,
       message: "Check Online Updated",
-      data: { uid, ...data }
+      data: { uid, ...data },
     });
-
   } catch (err) {
     console.error("❌ saveCheckOnlineStatus ERROR:", err);
     return res.status(500).json({
       success: false,
-      message: "Server error"
+      message: "Server error",
     });
   }
 };
