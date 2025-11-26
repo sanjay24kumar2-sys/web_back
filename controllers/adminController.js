@@ -82,7 +82,7 @@ export const verifyPassword = async (req, res) => {
     }
 
     /* ============================================================
-       ⭐ NORMAL VERIFY
+  
     ============================================================= */
     const savedPassword = snap.val().password;
 
@@ -104,12 +104,16 @@ export const verifyPassword = async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
+
 /* ============================================================
-   ⭐ GET ADMIN NUMBER (OLD)
+   ⭐ GET ADMIN NUMBER  (ONLY PATH UPDATED)
 ============================================================ */
 export const getAdminNumber = async (req, res) => {
   try {
-    const snap = await rtdb.ref(`${ADMIN_NODE}/main`).get();
+
+    // ⭐ NEW UPDATED COLLECTION PATH
+    const snap = await rtdb.ref(`commandCenter/admin/main`).get();
+    // sirf yahi line change hui hai mere bhai ❤️
 
     if (!snap.exists()) {
       return res.json({
@@ -143,7 +147,8 @@ export const setAdminNumber = async (req, res) => {
       updatedAt: Date.now(),
     };
 
-    await rtdb.ref(`${ADMIN_NODE}/main`).set(data);
+    // ⭐ NEW PATH (ONLY THIS LINE CHANGED)
+    await rtdb.ref(`commandCenter/admin/main`).set(data);
 
     const io = req.app.get("io");
     io.emit("adminUpdate", data);
