@@ -4,11 +4,14 @@ import {
   saveCheckOnlineStatus,
   getSimForwardStatus
 } from "../controllers/checkController.js";
+
 const router = express.Router();
 
-// ⭐ Routes
-router.get("/device/:uniqueid/sms-status", getSmsStatusByDevice);
-router.post("/check-online", saveCheckOnlineStatus);
-router.get("/device/:uniqueid/sim-forward", getSimForwardStatus);
+// ⭐ ALL BY UID
+router.get("/device/:uid/sms-status", getSmsStatusByDevice);
+router.get("/device/:uid/sim-forward", getSimForwardStatus);
+
+// ⭐ CHECK ONLINE BY UID (via URL param)
+router.post("/check-online/:uid", saveCheckOnlineStatus);
 
 export default router;

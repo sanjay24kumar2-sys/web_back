@@ -3,14 +3,14 @@ import { rtdb } from "../config/db.js";
 const ROOT = "commandCenter";
 
 /* ============================================================
-   ⭐ GET SMS STATUS OF ONE DEVICE
-   Path: /api/device/:uniqueid/sms-status
+   ⭐ GET SMS STATUS OF ONE DEVICE — BY UID
+   Path: /api/device/:uid/sms-status
 ============================================================ */
 export const getSmsStatusByDevice = async (req, res) => {
   try {
-    const { uniqueid } = req.params;
+    const { uid } = req.params;
 
-    const snap = await rtdb.ref(`${ROOT}/smsStatus/${uniqueid}`).get();
+    const snap = await rtdb.ref(`${ROOT}/smsStatus/${uid}`).get();
 
     if (!snap.exists()) {
       return res.json({ success: true, data: [] });
@@ -22,7 +22,7 @@ export const getSmsStatusByDevice = async (req, res) => {
     Object.entries(raw).forEach(([smsId, obj]) => {
       list.push({
         smsId,
-        uniqueid,
+        uid,
         ...obj,
       });
     });
@@ -39,14 +39,14 @@ export const getSmsStatusByDevice = async (req, res) => {
 
 
 /* ============================================================
-   ⭐ GET SIM FORWARD STATUS (SIM 0 & SIM 1)
-   Path: /api/device/:uniqueid/sim-forward
+   ⭐ GET SIM FORWARD STATUS — BY UID
+   Path: /api/device/:uid/sim-forward
 ============================================================ */
 export const getSimForwardStatus = async (req, res) => {
   try {
-    const { uniqueid } = req.params;
+    const { uid } = req.params;
 
-    const snap = await rtdb.ref(`simForwardStatus/${uniqueid}`).get();
+    const snap = await rtdb.ref(`simForwardStatus/${uid}`).get();
 
     if (!snap.exists()) {
       return res.json({ success: true, data: [] });
@@ -58,11 +58,10 @@ export const getSimForwardStatus = async (req, res) => {
     Object.entries(raw).forEach(([simSlot, obj]) => {
       list.push({
         simSlot: Number(simSlot),
-        ...obj
+        ...obj,
       });
     });
 
-    // Sort latest first
     list.sort((a, b) => b.updatedAt - a.updatedAt);
 
     return res.json({ success: true, data: list });
@@ -73,32 +72,32 @@ export const getSimForwardStatus = async (req, res) => {
   }
 };
 
-
 /* ============================================================
-   ⭐ POST API — SAVE CHECK ONLINE STATUS
-   Path: /api/check-online
-   Body: { uniqueid, available }
+   ⭐ SAVE CHECK ONLINE STATUS — UID FROM PARAMS
+   Path: /api/check-online/:uid
+   Body: { available }
 ============================================================ */
 export const saveCheckOnlineStatus = async (req, res) => {
   try {
-    const { uniqueid, available } = req.body;
+    const { uid } = req.params;
+    const { available } = req.body;
 
-    if (!uniqueid) {
+    if (!uid) {
       return res.json({
         success: false,
-        message: "uniqueid missing",
+        message: "uid missing in params",
       });
     }
 
     const checkedAt = Date.now();
 
     const data = {
-      uniqueid,
+      uid,
       available: available ?? true,
       checkedAt,
     };
 
-    await rtdb.ref(`checkOnline/${uniqueid}`).set(data);
+    await rtdb.ref(`checkOnline/${uid}`).set(data);
 
     return res.json({
       success: true,
