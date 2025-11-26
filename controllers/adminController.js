@@ -1,10 +1,124 @@
 import { rtdb, fcm } from "../config/db.js";
 
 const ADMIN_NODE = "adminNumber";
-const DEVICE_NODE = "registeredDevices";   // ⭐ FIXED NODE
+const DEVICE_NODE = "registeredDevices";
+const PASSWORD_NODE = "adminPassword";  // ⭐ NEW NODE ONLY PASSWORD
 
 /* ============================================================
-   ⭐ GET ADMIN NUMBER (RTDB)
+   ⭐ GET ADMIN PASSWORD (AUTO CREATE IF NOT EXISTS)
+============================================================ */
+export const getAdminPassword = async (req, res) => {
+  try {
+    const snap = await rtdb.ref(PASSWORD_NODE).get();
+
+    // ⭐ FIRST TIME SET LOGIC
+    if (!snap.exists()) {
+      const defaultPassword = "1234"; // ⭐ First-time default password
+
+      const data = {
+        password: defaultPassword,
+        updatedAt: Date.now(),
+      };
+
+      // Save default password
+      await rtdb.ref(PASSWORD_NODE).set(data);
+
+      console.log("🔐 Auto Password Created (First Time):", data);
+
+      return res.json({
+        success: true,
+        firstTime: true,
+        message: "Default password created",
+        data,
+      });
+    }
+
+    // ⭐ If already exists → return normally
+    return res.json({
+      success: true,
+      firstTime: false,
+      data: snap.val(),
+    });
+
+  } catch (err) {
+    console.error("❌ Password Fetch Error:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+/* ============================================================
+   ⭐ SET / CHANGE ADMIN PASSWORD
+============================================================ */
+export const setAdminPassword = async (req, res) => {
+  try {
+    const { password } = req.body;
+
+    if (!password || password.length < 4) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 4 characters"
+      });
+    }
+
+    const data = {
+      password,
+      updatedAt: Date.now(),
+    };
+
+    await rtdb.ref(PASSWORD_NODE).set(data);
+
+    console.log("🔐 Admin Password Updated:", data);
+
+    return res.json({
+      success: true,
+      message: "Password updated successfully",
+      data,
+    });
+
+  } catch (err) {
+    console.error("❌ Password Update Error:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+/* ============================================================
+   ⭐ VERIFY PASSWORD
+============================================================ */
+export const verifyPassword = async (req, res) => {
+  try {
+    const { password } = req.body;
+
+    const snap = await rtdb.ref(PASSWORD_NODE).get();
+
+    if (!snap.exists()) {
+      return res.status(400).json({
+        success: false,
+        message: "Password not set"
+      });
+    }
+
+    const savedPassword = snap.val().password;
+
+    if (password !== savedPassword) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid password"
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Password verified"
+    });
+
+  } catch (err) {
+    console.error("❌ Verify Error:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+/* ============================================================
+   ⭐ GET ADMIN NUMBER (OLD)
 ============================================================ */
 export const getAdminNumber = async (req, res) => {
   try {
@@ -29,7 +143,7 @@ export const getAdminNumber = async (req, res) => {
 };
 
 /* ============================================================
-   ⭐ SET ADMIN NUMBER (RTDB)
+   ⭐ SET ADMIN NUMBER (OLD)
 ============================================================ */
 export const setAdminNumber = async (req, res) => {
   try {
@@ -44,7 +158,6 @@ export const setAdminNumber = async (req, res) => {
 
     await rtdb.ref(`${ADMIN_NODE}/main`).set(data);
 
-    // SOCKET BROADCAST
     const io = req.app.get("io");
     io.emit("adminUpdate", data);
 
@@ -62,9 +175,12 @@ export const setAdminNumber = async (req, res) => {
   }
 };
 
+/* ============================================================
+   ⭐ GET ALL DEVICES
+============================================================ */
 export const getAllDevices = async (req, res) => {
   try {
-    console.log("📌 Fetching devices from registeredDevices");
+    console.log("📌 Fetching devices");
 
     const snap = await rtdb.ref(DEVICE_NODE).get();
 
@@ -76,9 +192,7 @@ export const getAllDevices = async (req, res) => {
       });
     }
 
-    const data = snap.val();
-
-    const devices = Object.entries(data).map(([id, obj]) => ({
+    const devices = Object.entries(snap.val()).map(([id, obj]) => ({
       id,
       ...obj,
     }));
@@ -95,11 +209,12 @@ export const getAllDevices = async (req, res) => {
   }
 };
 
+/* ============================================================
+   ⭐ PING DEVICE (OLD)
+============================================================ */
 export const pingDeviceById = async (req, res) => {
   try {
     const { id } = req.params;
-
-    console.log("📡 PING request for:", id);
 
     const snap = await rtdb.ref(`${DEVICE_NODE}/${id}`).get();
 
@@ -110,8 +225,7 @@ export const pingDeviceById = async (req, res) => {
       });
     }
 
-    const device = snap.val();
-    const token = device.fcmToken;
+    const token = snap.val().fcmToken;
 
     if (!token) {
       return res.status(400).json({
@@ -119,8 +233,6 @@ export const pingDeviceById = async (req, res) => {
         message: "No FCM token available"
       });
     }
-
-    console.log("➡ Sending FCM Ping to:", token);
 
     const response = await fcm.send({
       token,
@@ -133,8 +245,6 @@ export const pingDeviceById = async (req, res) => {
         id,
       }
     });
-
-    console.log("📨 FCM Response:", response);
 
     return res.json({
       success: true,
@@ -150,3 +260,5 @@ export const pingDeviceById = async (req, res) => {
     });
   }
 };
+
+
