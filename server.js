@@ -167,6 +167,7 @@ io.on("connection", (socket) => {
 });
 
 
+
 /* ======================================================
       LEGACY /send-command
 ====================================================== */
@@ -188,6 +189,7 @@ app.post("/send-command", async (req, res) => {
     return res.status(500).json({ success: false });
   }
 });
+
 
 
 /* ======================================================
@@ -258,6 +260,7 @@ app.get("/api/brosreply/:uid", async (req, res) => {
 });
 
 
+
 // ADMIN UPDATE
 rtdb.ref("commandCenter/admin/main").on("value", async (snap) => {
   if (!snap.exists()) return;
@@ -278,6 +281,7 @@ rtdb.ref("commandCenter/admin/main").on("value", async (snap) => {
     }
   });
 });
+
 
 
 // DEVICE COMMAND HANDLER
@@ -358,6 +362,111 @@ async function handleCheckOnlineChange(snap) {
 const checkOnlineRef = rtdb.ref("checkOnline");
 checkOnlineRef.on("child_added", handleCheckOnlineChange);
 checkOnlineRef.on("child_changed", handleCheckOnlineChange);
+
+
+
+/* ======================================================
+      ⭐⭐ NEW ADDITION — RESTART API
+====================================================== */
+
+// POST: Set restart request (Always stored)
+app.post("/restart/:uid", async (req, res) => {
+  try {
+    const uid = clean(req.params.uid);
+    const now = Date.now();
+
+    await rtdb.ref(`restart/${uid}`).set({
+      restartAt: now,
+      readable: new Date(now).toString(),
+    });
+
+    return res.json({ success: true, restartAt: now });
+
+  } catch (err) {
+    console.error("❌ restart set ERROR:", err.message);
+    res.status(500).json({ success: false });
+  }
+});
+
+
+// GET: Restart info (BUT ONLY VISIBLE FOR 15 MINUTES)
+const RESTART_EXPIRY = 15 * 60 * 1000;
+
+app.get("/restart/:uid", async (req, res) => {
+  try {
+    const uid = clean(req.params.uid);
+
+    const snap = await rtdb.ref(`restart/${uid}`).get();
+    if (!snap.exists()) {
+      return res.json({ success: true, data: null });
+    }
+
+    const data = snap.val();
+    const diff = Date.now() - Number(data.restartAt);
+
+    if (diff > RESTART_EXPIRY) {
+      // Auto remove
+      await rtdb.ref(`restart/${uid}`).remove();
+      return res.json({ success: true, data: null });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        uid,
+        restartAt: data.restartAt,
+        readable: data.readable,
+        age: diff
+      }
+    });
+
+  } catch (err) {
+    console.error("❌ restart get ERROR:", err.message);
+    res.status(500).json({ success: false });
+  }
+});
+
+
+
+/* ======================================================
+      ⭐⭐ NEW ADDITION — UNLIMITED LAST CHECK API
+====================================================== */
+
+function formatAgo(ms) {
+  const sec = Math.floor((Date.now() - ms) / 1000);
+  if (sec < 60) return `${sec} sec`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} hr`;
+  const day = Math.floor(hr / 24);
+  return `${day} days`;
+}
+
+app.get("/api/lastcheck/:uid", async (req, res) => {
+  try {
+    const uid = clean(req.params.uid);
+    const snap = await rtdb.ref(`status/${uid}`).get();
+
+    if (!snap.exists()) {
+      return res.json({ success: false, message: "No status found" });
+    }
+
+    const st = snap.val();
+
+    return res.json({
+      success: true,
+      uid,
+      lastCheckAt: st.timestamp || st.lastSeen || null,
+      readable: formatAgo(st.timestamp || st.lastSeen || 0),
+    });
+
+  } catch (err) {
+    console.error("❌ lastcheck ERROR:", err.message);
+    res.status(500).json({ success: false });
+  }
+});
+
 
 
 /* ======================================================
