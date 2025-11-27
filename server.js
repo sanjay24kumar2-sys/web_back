@@ -421,58 +421,26 @@ function formatAgo(ms) {
   return `${day} days`;
 }
 
-
-/* ======================================================
-      UNIFIED LAST-CHECK API
-   - Canonical time: resetCollection → status fallback
-   - Taki har jagah same time dikhe (cards + details)
-====================================================== */
 app.get("/api/lastcheck/:uid", async (req, res) => {
   try {
     const uid = clean(req.params.uid);
+    const snap = await rtdb.ref(`status/${uid}`).get();
 
-    // 1) Pehle resetCollection se lo (ye hi check-online ka main clock hai)
-    const [resetSnap, statusSnap] = await Promise.all([
-      rtdb.ref(`resetCollection/${uid}`).get(),
-      rtdb.ref(`status/${uid}`).get(),
-    ]);
-
-    let ts = null;
-    let readableRaw = null;
-
-    if (resetSnap.exists()) {
-      const resetData = resetSnap.val() || {};
-      // resetAt ko primary timestamp treat karo
-      if (resetData.resetAt) {
-        ts = Number(resetData.resetAt);
-        readableRaw = resetData.readable || null;
-      }
+    if (!snap.exists()) {
+      return res.json({ success: false, message: "No status found" });
     }
 
-    // Agar resetCollection nahi mila / corrupt hai to status se fallback
-    if (!ts && statusSnap.exists()) {
-      const st = statusSnap.val() || {};
-      ts = Number(st.timestamp || st.lastSeen || 0) || null;
-    }
-
-    if (!ts) {
-      return res.json({
-        success: false,
-        message: "No last-check data found",
-      });
-    }
+    const st = snap.val();
 
     return res.json({
       success: true,
       uid,
-      lastCheckAt: ts,
-      readable: formatAgo(ts),
-      // optional raw string (agar frontend ko exact Date string bhi chahiye)
-      rawReadable: readableRaw || new Date(ts).toString(),
+      lastCheckAt: st.timestamp || st.lastSeen || null,
+      readable: formatAgo(st.timestamp || st.lastSeen || 0),
     });
 
   } catch (err) {
-    console.error("❌ lastcheck ERROR:", err.message);
+    console.error(" lastcheck ERROR:", err.message);
     res.status(500).json({ success: false });
   }
 });
