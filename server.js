@@ -92,30 +92,24 @@ async function buildDevicesList() {
 }
 
 
-/* ======================================================
-      BROADCAST LIVE DEVICES TO ALL CLIENTS
-====================================================== */
 async function refreshDevicesLive(reason = "") {
   try {
-    const devices = await buildDevicesList();
+   const devices = await buildDevicesList();
 
-    console.log(`📡 devicesLive (${reason}) total=${devices.length}`);
+lastDevicesList = devices;   // ⭐ REQUIRED ⭐
 
-    // Always send fresh live data
-    io.emit("devicesLive", {
-      success: true,
-      count: devices.length,
-      data: devices,
-    });
+io.emit("devicesLive", {
+  success: true,
+  count: devices.length,
+  data: devices,
+});
+
   } catch (err) {
     console.error("❌ refreshDevicesLive ERROR:", err.message);
   }
 }
 
 
-/* ======================================================
-      SOCKET.IO CONNECTION HANDLER
-====================================================== */
 io.on("connection", (socket) => {
   console.log("🔗 Client Connected:", socket.id);
 
