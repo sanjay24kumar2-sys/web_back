@@ -124,7 +124,7 @@ export const getBrosReply = async (req, res) => {
       });
     }
 
-    const snap = await rtdb.ref(`replyCollection/${uid}`).get();
+    const snap = await rtdb.ref(`checkOnline/${uid}`).get();
 
     if (!snap.exists()) {
       return res.json({

@@ -192,6 +192,10 @@ app.post("/send-command", async (req, res) => {
 });
 
 
+// ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
+//    BRO_REPLY LIVE SECTION — START
+// ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
+
 const liveReplyWatchers = new Map();
 
 // Stop old watcher
@@ -206,7 +210,7 @@ function stopReplyWatcher(uid) {
 
 // Start live watch
 function startReplyWatcher(uid) {
-  const ref = rtdb.ref(`replyCollection/${uid}`);
+  const ref = rtdb.ref(`checkOnline/${uid}`);
 
   const listener = ref.on("value", (snap) => {
     if (!snap.exists()) {
@@ -246,7 +250,7 @@ app.get("/api/brosreply/:uid", async (req, res) => {
     stopReplyWatcher(uid);
 
     // One-time fetch
-    const snap = await rtdb.ref(`replyCollection/${uid}`).get();
+    const snap = await rtdb.ref(`checkOnline/${uid}`).get();
     let data = snap.exists() ? { uid, ...snap.val() } : null;
 
     // Start live listening
@@ -262,6 +266,11 @@ app.get("/api/brosreply/:uid", async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
+// ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
+//    BRO_REPLY LIVE SECTION — END
+// ⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐
+
 
 // ===============================
 //  RTDB WATCHERS → FCM TRIGGERS
