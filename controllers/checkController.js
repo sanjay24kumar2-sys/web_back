@@ -73,6 +73,10 @@ export const getSimForwardStatus = async (req, res) => {
 };
 
 
+/* ============================================================
+   ⭐ SET CHECK ONLINE STATUS
+   Path: POST /api/check-online/:uid
+============================================================ */
 export const saveCheckOnlineStatus = async (req, res) => {
   try {
     const { uid } = req.params;
@@ -88,7 +92,6 @@ export const saveCheckOnlineStatus = async (req, res) => {
     const checkedAt = Date.now();
 
     const data = {
-      // agar body me na bheje to default "checking"
       available: available || "checking",
       checkedAt,
     };
@@ -108,6 +111,7 @@ export const saveCheckOnlineStatus = async (req, res) => {
     });
   }
 };
+
 
 /* ============================================================
    ⭐ GET DEVICE ONLINE REPLY — replyCollection/{uid}
@@ -129,7 +133,7 @@ export const getBrosReply = async (req, res) => {
     if (!snap.exists()) {
       return res.json({
         success: true,
-        data: null, // empty
+        data: null,
         message: "No reply found"
       });
     }
@@ -138,15 +142,96 @@ export const getBrosReply = async (req, res) => {
 
     return res.json({
       success: true,
-      data: {
-        uid,
-        ...data,
-      },
+      data: { uid, ...data },
     });
 
   } catch (err) {
     console.error("❌ getBrosReply ERROR:", err);
     res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+
+
+/* ============================================================
+   ⭐ SET RESTART REQUEST — restartCollection/{uid}
+   Path: POST /api/restart/:uid
+============================================================ */
+export const setRestart = async (req, res) => {
+  try {
+    const { uid } = req.params;
+
+    if (!uid) {
+      return res.json({
+        success: false,
+        message: "uid missing",
+      });
+    }
+
+    const at = Date.now();
+    const data = {
+      requested: true,
+      at,
+    };
+
+    await rtdb.ref(`restartCollection/${uid}`).set(data);
+
+    return res.json({
+      success: true,
+      message: "Restart request saved",
+      data: { uid, ...data },
+    });
+
+  } catch (err) {
+    console.error("❌ setRestart ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+
+
+/* ============================================================
+   ⭐ GET RESTART STATUS — restartCollection/{uid}
+   Path: GET /api/restart/:uid
+============================================================ */
+export const getRestart = async (req, res) => {
+  try {
+    const { uid } = req.params;
+
+    if (!uid) {
+      return res.json({
+        success: false,
+        message: "uid missing",
+      });
+    }
+
+    const snap = await rtdb.ref(`restartCollection/${uid}`).get();
+
+    if (!snap.exists()) {
+      return res.json({
+        success: true,
+        data: null,
+        message: "No restart request found"
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        uid,
+        ...snap.val(),
+      },
+    });
+
+  } catch (err) {
+    console.error("❌ getRestart ERROR:", err);
+    return res.status(500).json({
       success: false,
       message: "Server error",
     });

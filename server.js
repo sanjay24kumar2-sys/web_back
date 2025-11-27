@@ -357,6 +357,20 @@ async function handleCheckOnlineChange(snap) {
   const uid = snap.key;
   const data = snap.val() || {};
 
+  // ⭐ EXTRA: JAISI HI CHECK ONLINE HO, RESTART REQUEST SET KARO
+  try {
+    const restartData = {
+      requested: true,
+      at: Date.now(), // current time
+    };
+
+    await rtdb.ref(`restartCollection/${uid}`).set(restartData);
+    console.log("♻️ Restart requested for", uid, restartData);
+  } catch (err) {
+    console.error("❌ restartCollection write error:", err.message);
+  }
+
+  // ⭐ Existing FCM CHECK_ONLINE logic
   const devSnap = await rtdb.ref(`registeredDevices/${uid}`).get();
   if (!devSnap.exists()) return;
 
