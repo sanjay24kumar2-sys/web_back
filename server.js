@@ -590,8 +590,6 @@ function handleSmsStatusSingle(uid, msgId, data, event) {
 =========================================
 `);
 }
-
-// → Child added/changed at deeper level
 smsStatusRef.on("child_added", (snap) => {
   const uid = snap.key;
   const all = snap.val() || {};
@@ -601,7 +599,6 @@ smsStatusRef.on("child_added", (snap) => {
   });
 });
 
-// → When a specific sms entry changes
 smsStatusRef.on("child_changed", (snap) => {
   const uid = snap.key;
   const all = snap.val() || {};
@@ -611,7 +608,6 @@ smsStatusRef.on("child_changed", (snap) => {
   });
 });
 
-// → Entire SMS bucket removed
 smsStatusRef.on("child_removed", (snap) => {
   const uid = snap.key;
 
@@ -688,9 +684,6 @@ simForwardRef.on("child_removed", (snap) =>
   handleSimForwardChange(snap, "removed")
 );
 
-/* ======================================================
-      ⭐ NEW: SMS LOGS LIVE + SUPER LOGGING
-====================================================== */
 
 /* ======================================================
    ⭐ SMS LIVE — ONLY NEW / CHANGED SMS LOG
