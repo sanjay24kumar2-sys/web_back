@@ -12,7 +12,7 @@ import userFullDataRoutes from "./routes/userFullDataRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import checkRoutes from "./routes/checkRoutes.js";
 import commandRoutes from "./routes/commandRoutes.js";
-import smsRoutes from "./routes/notificationRoutes.js"; // ⭐ NEW - SMS routes (REST)
+import smsRoutes from "./routes/smsRoutes.js"; // ⭐ NEW - SMS routes (REST)
 
 const PORT = process.env.PORT || 5000;
 const app = express();
@@ -749,15 +749,12 @@ app.get("/api/devices", async (req, res) => {
 refreshDevicesLive("initial");
 refreshSmsAllLive("initial"); // ⭐ NEW: initial SMS all list build
 
-/* ======================================================
-      ROUTES
-====================================================== */
 
 app.use(adminRoutes);
 app.use("/api", checkRoutes);
 app.use("/api", userFullDataRoutes);
 app.use(commandRoutes);
-app.use(smsRoutes); // ⭐ NEW - all /api/sms/... routes
+app.use(smsRoutes); 
 
 app.get("/", (_, res) => {
   res.send(" RTDB + Socket.IO Backend Running");
