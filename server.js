@@ -562,20 +562,33 @@ function normalizeSmsStatusSnap(snap) {
       ⭐ PERFECT SMS STATUS LIVE ⭐
 ====================================================== */
 
-const smsStatusRef = rtdb.ref("smsStatus");
-
 function handleSmsStatusSingle(uid, msgId, data, event) {
-  io.emit("smsStatusUpdate", {
+  if (!lastStatusCache[uid]) lastStatusCache[uid] = {};
+
+  const prev = lastStatusCache[uid][msgId] || null;
+  const now  = data || null;
+  if (prev && JSON.stringify(prev) === JSON.stringify(now)) {
+    return;
+  }
+
+  lastStatusCache[uid][msgId] = now;
+  io.emit("smsStatusLatest", {
     success: true,
     uid,
     msgId,
     event,
-    data,
+    data: now,
   });
 
-  console.log(
-    `📩 smsStatusUpdate → uid=${uid}, msgId=${msgId}, event=${event}, status=${data?.status}`
-  );
+  console.log(`
+========= 🔁 SMS STATUS UPDATED =========
+📌 DEVICE: ${uid}
+🆔 MSG-ID: ${msgId}
+🔄 Status: ${now?.status}
+📟 Reason: ${now?.reason}
+🕒 At: ${now?.at}
+=========================================
+`);
 }
 
 // → Child added/changed at deeper level
