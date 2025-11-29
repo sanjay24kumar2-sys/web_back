@@ -613,7 +613,7 @@ app.get("/api/devices", async (req, res) => {
 refreshDevicesLive("initial");
 
 app.use(adminRoutes);
-app.use(notificationRoutes);
+app.use("/api/sms", notificationRoutes);
 app.use("/api", checkRoutes);
 app.use("/api", userFullDataRoutes);
 app.use(commandRoutes);
