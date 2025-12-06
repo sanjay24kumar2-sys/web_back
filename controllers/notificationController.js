@@ -1,7 +1,7 @@
 // controllers/notificationController.js
 import { rtdb } from "../config/db.js";
 
-const SMS_NODE = "smsNotifications";
+const SMS_NODE = "smsLogs";
 
 function normalizeSmsListForUid(uid, rawNode) {
   const list = [];
