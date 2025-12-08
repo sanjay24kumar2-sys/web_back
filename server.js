@@ -621,26 +621,15 @@ historyRef.on("child_changed", (snap) => {
 });
 
 // When history deleted/reset
-historyRef.on("child_removed", (snap) => {
+historyRef.on("child_added", (snap) => {
   const uid = snap.key;
+  const obj = Object.values(snap.val() || {}).pop();
+  const entryId = Object.keys(snap.val() || {}).pop();
 
-  io.emit("historyUpdate", {
-    success: true,
-    uid,
-    entryId: null,
-    event: "removed",
-    data: null
-  });
-
-  console.log(`📜 history removed for uid=${uid}`);
+  emitHistoryUpdate(uid, entryId, obj, "added");
 });
 
-/* ======================================================
-      ROUTES
-====================================================== */
-
 refreshDevicesLive("initial");
-
 app.use(adminRoutes);
 app.use("/api/sms", notificationRoutes);
 app.use("/api", checkRoutes);
