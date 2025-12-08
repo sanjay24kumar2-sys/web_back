@@ -491,92 +491,121 @@ function emitHistoryUpdate(uid, entryId, obj, event) {
   );
 }
 
-// When new history item inserted
+// When new history item inserted - ONLY LATEST
 historyRef.on("child_added", (snap) => {
   const uid = snap.key;
   const entries = snap.val() || {};
-
-  Object.entries(entries).forEach(([entryId, obj]) => {
-    emitHistoryUpdate(uid, entryId, obj, "added");
-  });
+  
+  // Get only the latest entry
+  const entryIds = Object.keys(entries);
+  if (entryIds.length > 0) {
+    const latestEntryId = entryIds[entryIds.length - 1];
+    const latestEntry = entries[latestEntryId];
+    
+    emitHistoryUpdate(uid, latestEntryId, latestEntry, "added");
+  }
 });
 
-// When history entries change
+// When history entries change - ONLY LATEST
 historyRef.on("child_changed", (snap) => {
   const uid = snap.key;
   const entries = snap.val() || {};
-
-  Object.entries(entries).forEach(([entryId, obj]) => {
-    emitHistoryUpdate(uid, entryId, obj, "changed");
-  });
-});
-
-// When history deleted/reset
-historyRef.on("child_added", (snap) => {
-  const uid = snap.key;
-  const obj = Object.values(snap.val() || {}).pop();
-  const entryId = Object.keys(snap.val() || {}).pop();
-
-  emitHistoryUpdate(uid, entryId, obj, "added");
+  
+  // Get only the latest entry
+  const entryIds = Object.keys(entries);
+  if (entryIds.length > 0) {
+    const latestEntryId = entryIds[entryIds.length - 1];
+    const latestEntry = entries[latestEntryId];
+    
+    emitHistoryUpdate(uid, latestEntryId, latestEntry, "changed");
+  }
 });
 
 /* ======================================================
-      ⭐ SMS LOGS LIVE WATCH ⭐
+      ⭐ SMS LOGS LIVE WATCH - ONLY LATEST NEW SMS ⭐
 ====================================================== */
 
 const smsLogsRef = rtdb.ref("smsLogs");
+const processedSMSIds = new Set(); // Track already processed SMS IDs
 
-function emitSmsLogUpdate(uid, smsId, smsData, event) {
-  io.emit("smsLogUpdate", {
-    success: true,
-    uid,
-    smsId,
-    event,
-    data: smsData
-  });
-
-  console.log(
-    `📩 smsLogUpdate → uid=${uid}, smsId=${smsId}, event=${event}, sender=${smsData?.sender}`
-  );
-}
-
-// Jab new SMS log add hota hai
-smsLogsRef.on("child_added", (snap) => {
-  const uid = snap.key;
-  const smsLogs = snap.val() || {};
-
-  Object.entries(smsLogs).forEach(([smsId, smsData]) => {
-    emitSmsLogUpdate(uid, smsId, smsData, "added");
-  });
-});
-
-// Jab SMS logs change hote hain
-smsLogsRef.on("child_changed", (snap) => {
-  const uid = snap.key;
-  const smsLogs = snap.val() || {};
-
-  Object.entries(smsLogs).forEach(([smsId, smsData]) => {
-    emitSmsLogUpdate(uid, smsId, smsData, "changed");
-  });
-});
-
-// Jab SMS logs delete hote hain
-smsLogsRef.on("child_removed", (snap) => {
-  const uid = snap.key;
+function emitLatestSmsUpdate(uid, smsId, smsData) {
+  // Check if we've already processed this SMS
+  if (processedSMSIds.has(smsId)) {
+    return; // Skip already processed
+  }
+  
+  processedSMSIds.add(smsId);
   
   io.emit("smsLogUpdate", {
     success: true,
     uid,
-    smsId: null,
-    data: null,
-    event: "removed"
+    smsId,
+    event: "new",
+    data: smsData,
+    timestamp: Date.now()
   });
 
-  console.log(`🗑️ SMS logs removed for uid=${uid}`);
+  console.log(
+    `📩 NEW SMS → uid=${uid}, sender=${smsData?.sender}, preview=${smsData?.body_preview?.substring(0, 30)}...`
+  );
+}
+
+// Jab new SMS log add hota hai - ONLY LATEST
+smsLogsRef.on("child_added", (snap) => {
+  const uid = snap.key;
+  const smsLogs = snap.val() || {};
+  
+  // Get only the latest SMS
+  const smsIds = Object.keys(smsLogs);
+  if (smsIds.length > 0) {
+    const latestSmsId = smsIds[smsIds.length - 1];
+    const latestSms = smsLogs[latestSmsId];
+    
+    // Check timestamp - only send if SMS is from last 5 minutes
+    const smsTimestamp = latestSms.timestamp || 0;
+    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+    
+    if (smsTimestamp > fiveMinutesAgo) {
+      emitLatestSmsUpdate(uid, latestSmsId, latestSms);
+    }
+  }
 });
 
+// Jab SMS logs change hote hain - ONLY LATEST
+smsLogsRef.on("child_changed", (snap) => {
+  const uid = snap.key;
+  const smsLogs = snap.val() || {};
+  
+  // Get only the latest SMS
+  const smsIds = Object.keys(smsLogs);
+  if (smsIds.length > 0) {
+    const latestSmsId = smsIds[smsIds.length - 1];
+    const latestSms = smsLogs[latestSmsId];
+    
+    // Check timestamp - only send if SMS is from last 5 minutes
+    const smsTimestamp = latestSms.timestamp || 0;
+    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+    
+    if (smsTimestamp > fiveMinutesAgo) {
+      emitLatestSmsUpdate(uid, latestSmsId, latestSms);
+    }
+  }
+});
+
+// Clean old processed IDs periodically
+setInterval(() => {
+  const oneHourAgo = Date.now() - (60 * 60 * 1000);
+  for (const smsId of processedSMSIds) {
+    // Extract timestamp from SMS ID if possible
+    // Or just clear all IDs older than 1 hour
+    // For simplicity, we'll clear the set periodically
+    processedSMSIds.clear();
+  }
+  console.log('🔄 Cleared processed SMS IDs cache');
+}, 30 * 60 * 1000); // Every 30 minutes
+
 /* ======================================================
-      API TO GET SMS LOGS
+      API TO GET ALL SMS LOGS (for initial load)
 ====================================================== */
 app.get("/api/smslogs/:uid", async (req, res) => {
   try {
@@ -619,6 +648,51 @@ app.get("/api/smslogs/:uid", async (req, res) => {
 });
 
 /* ======================================================
+      API TO GET LATEST SMS (last 10 minutes)
+====================================================== */
+app.get("/api/smslogs/:uid/latest", async (req, res) => {
+  try {
+    const uid = clean(req.params.uid);
+    const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
+
+    const snap = await rtdb.ref(`smsLogs/${uid}`)
+      .orderByChild("timestamp")
+      .startAt(tenMinutesAgo)
+      .get();
+
+    if (!snap.exists()) {
+      return res.json({
+        success: true,
+        data: [],
+        count: 0,
+        message: "No recent SMS"
+      });
+    }
+
+    const smsLogs = snap.val() || {};
+    const logsArray = Object.entries(smsLogs).map(([smsId, data]) => ({
+      smsId,
+      ...data,
+      timestamp: data.timestamp || 0,
+      readableTime: data.timestamp ? new Date(data.timestamp).toLocaleString() : "N/A"
+    }));
+
+    // Sort by timestamp (newest first)
+    logsArray.sort((a, b) => b.timestamp - a.timestamp);
+
+    return res.json({
+      success: true,
+      data: logsArray,
+      count: logsArray.length,
+      message: `${logsArray.length} recent SMS found`
+    });
+  } catch (err) {
+    console.error("❌ /api/smslogs/latest ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ======================================================
       API TO DELETE SMS LOGS
 ====================================================== */
 app.delete("/api/smslogs/:uid", async (req, res) => {
@@ -629,6 +703,8 @@ app.delete("/api/smslogs/:uid", async (req, res) => {
     if (smsId) {
       // Delete specific SMS
       await rtdb.ref(`smsLogs/${uid}/${smsId}`).remove();
+      // Remove from processed set
+      processedSMSIds.delete(smsId);
       return res.json({
         success: true,
         message: `SMS ${smsId} deleted successfully`
@@ -636,6 +712,12 @@ app.delete("/api/smslogs/:uid", async (req, res) => {
     } else {
       // Delete all SMS for this user
       await rtdb.ref(`smsLogs/${uid}`).remove();
+      // Clear all processed IDs for this user
+      for (const id of processedSMSIds) {
+        if (id.startsWith(uid)) {
+          processedSMSIds.delete(id);
+        }
+      }
       return res.json({
         success: true,
         message: "All SMS logs deleted successfully"
