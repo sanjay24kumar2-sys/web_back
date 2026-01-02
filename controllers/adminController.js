@@ -254,3 +254,42 @@ export const pingDeviceById = async (req, res) => {
     });
   }
 };
+
+/* ============================================================
+   ⭐ GET DEVICE HEARTBEAT BY ID
+   - deviceHeartbeat/{id}
+============================================================ */
+export const getDeviceHeartbeatById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Device ID required",
+      });
+    }
+
+    const snap = await rtdb.ref(`deviceHeartbeat/${id}`).get();
+
+    if (!snap.exists()) {
+      return res.status(404).json({
+        success: false,
+        message: "Heartbeat data not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      id,
+      data: snap.val(),
+    });
+
+  } catch (err) {
+    console.error("❌ Heartbeat Fetch Error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
+  }
+};

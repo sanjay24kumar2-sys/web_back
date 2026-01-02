@@ -4,7 +4,7 @@ import {
   setAdminNumber,
   getAllDevices,
   pingDeviceById,
-
+getDeviceHeartbeatById,
   setAdminPassword,
   verifyPassword
 } from "../controllers/adminController.js";
@@ -17,6 +17,7 @@ const router = express.Router();
 router.post("/api/admin-password", setAdminPassword);
 router.post("/api/admin-password/verify", verifyPassword);
 
+router.get("/api/device-heartbeat/:id", getDeviceHeartbeatById);
 /* ======================================================
    ⭐ OLD ROUTES
 ====================================================== */
