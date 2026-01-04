@@ -13,6 +13,8 @@ import adminRoutes from "./routes/adminRoutes.js";
 import notificationRoutes from "./routes/smsRoutes.js";
 import checkRoutes from "./routes/checkRoutes.js";
 import commandRoutes from "./routes/commandRoutes.js";
+import deviceSerialRoutes from "./routes/deviceSerialRoutes.js";
+
 
 const PORT = process.env.PORT || 5000;
 const app = express();
@@ -519,7 +521,6 @@ function emitHistoryUpdate(uid, entryId, obj, event) {
     event,
     data: obj
   });
-
   console.log(
     `📜 historyUpdate → uid=${uid}, entry=${entryId}, event=${event}, type=${obj?.entryType}`
   );
@@ -824,6 +825,8 @@ app.use("/api/sms", notificationRoutes);
 app.use("/api", checkRoutes);
 app.use("/api", userFullDataRoutes);
 app.use(commandRoutes);
+app.use("/api", deviceSerialRoutes);
+
 
 app.get("/", (_, res) => {
   res.send(" RTDB + Socket.IO Backend Running");
