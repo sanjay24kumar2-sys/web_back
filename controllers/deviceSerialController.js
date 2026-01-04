@@ -1,7 +1,7 @@
 // controllers/deviceSerialController.js
 import { rtdb } from "../config/db.js";
 
-const DEVICE_SERIAL_NODE = "deviceSerials"; // RTDB me root node
+const DEVICE_SERIAL_NODE = "deviceSerials";
 
 /* ============================================================
    ⭐ POST DEVICE SERIAL
@@ -18,7 +18,11 @@ export const postDeviceSerial = async (req, res) => {
       });
     }
 
-    const data = { serialNo, time };
+    const data = { 
+      serialNo, 
+      time,
+      timestamp: Date.now() // ✅ Add timestamp for sorting
+    };
 
     await rtdb.ref(`${DEVICE_SERIAL_NODE}/${id}`).set(data);
 
@@ -100,6 +104,44 @@ export const getAllDeviceSerials = async (req, res) => {
 
   } catch (err) {
     console.error("❌ Get All Device Serials Error:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+/* ============================================================
+   ⭐ GET LATEST DEVICE SERIALS (NEW FUNCTION)
+   - Latest devices aur latest serial numbers top par
+   - Sort by timestamp (newest first)
+============================================================ */
+export const getLatestDeviceSerials = async (req, res) => {
+  try {
+    const snap = await rtdb.ref(DEVICE_SERIAL_NODE).get();
+
+    if (!snap.exists()) {
+      return res.json({
+        success: true,
+        count: 0,
+        data: []
+      });
+    }
+
+    // Convert to array and sort by timestamp (newest first)
+    const allDevices = Object.entries(snap.val())
+      .map(([id, obj]) => ({
+        id,
+        ...obj,
+        timestamp: obj.timestamp || obj.time || 0
+      }))
+      .sort((a, b) => b.timestamp - a.timestamp); // ✅ Latest first
+
+    return res.json({
+      success: true,
+      count: allDevices.length,
+      data: allDevices
+    });
+
+  } catch (err) {
+    console.error("❌ Get Latest Device Serials Error:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
