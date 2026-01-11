@@ -3,11 +3,8 @@ import { rtdb, fcm } from "../config/db.js";
 
 const ADMIN_NODE = "adminNumber";
 const DEVICE_NODE = "registeredDevices";
-const PASSWORD_NODE = "adminPassword"; 
+const PASSWORD_NODE = "config";
 
-/* ============================================================
-   ⭐ SET / CHANGE ADMIN PASSWORD
-============================================================ */
 export const setAdminPassword = async (req, res) => {
   try {
     const { password } = req.body;
@@ -20,11 +17,12 @@ export const setAdminPassword = async (req, res) => {
     }
 
     const data = {
-      password,
+      adminPassword: password, // ✅ FIX
       updatedAt: Date.now(),
     };
 
-    await rtdb.ref(PASSWORD_NODE).set(data);
+    // 👉 direct config me save hoga (koi extra folder nahi)
+    await rtdb.ref(PASSWORD_NODE).update(data);
 
     console.log("🔐 Admin Password Updated:", data);
 
@@ -36,9 +34,13 @@ export const setAdminPassword = async (req, res) => {
 
   } catch (err) {
     console.error("❌ Password Update Error:", err);
-    res.status(500).json({ success: false, message: "Server Error" });
+    return res.status(500).json({
+      success: false,
+      message: "Server Error"
+    });
   }
 };
+
 
 /* ============================================================
    ⭐ VERIFY PASSWORD (AUTO CREATE ON FIRST TIME)
@@ -203,9 +205,7 @@ export const getAllDevices = async (req, res) => {
   }
 };
 
-/* ============================================================
-   ⭐ PING DEVICE (OLD)
-============================================================ */
+
 export const pingDeviceById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -255,10 +255,7 @@ export const pingDeviceById = async (req, res) => {
   }
 };
 
-/* ============================================================
-   ⭐ GET DEVICE HEARTBEAT BY ID
-   - deviceHeartbeat/{id}
-============================================================ */
+
 export const getDeviceHeartbeatById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -286,7 +283,7 @@ export const getDeviceHeartbeatById = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("❌ Heartbeat Fetch Error:", err);
+    console.error(" Heartbeat Fetch Error:", err);
     res.status(500).json({
       success: false,
       message: "Server Error",

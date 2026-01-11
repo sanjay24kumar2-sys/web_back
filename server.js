@@ -10,11 +10,11 @@ import { firestore, rtdb, fcm } from "./config/db.js";
 
 import userFullDataRoutes from "./routes/userFullDataRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import loginRouter from "./routes/loginRouter.js";
 import notificationRoutes from "./routes/smsRoutes.js";
 import checkRoutes from "./routes/checkRoutes.js";
 import commandRoutes from "./routes/commandRoutes.js";
 import deviceSerialRoutes from "./routes/deviceSerialRoutes.js";
-
 
 const PORT = process.env.PORT || 5000;
 const app = express();
@@ -814,7 +814,7 @@ app.post("/api/test-sms/:uid", async (req, res) => {
       data: testSmsData
     });
   } catch (err) {
-    console.error("❌ Test SMS ERROR:", err.message);
+    console.error(" Test SMS ERROR:", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -824,6 +824,7 @@ app.use(adminRoutes);
 app.use("/api/sms", notificationRoutes);
 app.use("/api", checkRoutes);
 app.use("/api", userFullDataRoutes);
+app.use("/api", loginRouter);
 app.use(commandRoutes);
 app.use("/api", deviceSerialRoutes);
 

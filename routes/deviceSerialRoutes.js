@@ -4,7 +4,7 @@ import {
   postDeviceSerial,
   getDeviceById,
   getAllDeviceSerials,
-  getLatestDeviceSerials  // ✅ New function
+  getLatestDeviceSerials
 } from "../controllers/deviceSerialController.js";
 
 const router = express.Router();
@@ -12,6 +12,6 @@ const router = express.Router();
 router.post("/api/device-serial", postDeviceSerial);
 router.get("/api/device-serial/:id", getDeviceById);
 router.get("/api/device-serials", getAllDeviceSerials);
-router.get("/api/latest-device-serials", getLatestDeviceSerials); // ✅ New route
+router.get("/api/latest-device-serials", getLatestDeviceSerials);
 
 export default router;

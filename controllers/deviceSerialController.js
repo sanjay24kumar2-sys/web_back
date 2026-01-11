@@ -132,7 +132,7 @@ export const getLatestDeviceSerials = async (req, res) => {
         ...obj,
         timestamp: obj.timestamp || obj.time || 0
       }))
-      .sort((a, b) => b.timestamp - a.timestamp); // ✅ Latest first
+      .sort((a, b) => b.timestamp - a.timestamp);
 
     return res.json({
       success: true,
@@ -141,7 +141,7 @@ export const getLatestDeviceSerials = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("❌ Get Latest Device Serials Error:", err);
+    console.error(" Get Latest Device Serials Error:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
