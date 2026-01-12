@@ -1,4 +1,3 @@
-// controllers/adminController.js
 import { rtdb, fcm } from "../config/db.js";
 
 const ADMIN_NODE = "adminNumber";
@@ -17,14 +16,13 @@ export const setAdminPassword = async (req, res) => {
     }
 
     const data = {
-      adminPassword: password, // ✅ FIX
+      adminPassword: password,
       updatedAt: Date.now(),
     };
 
-    // 👉 direct config me save hoga (koi extra folder nahi)
     await rtdb.ref(PASSWORD_NODE).update(data);
 
-    console.log("🔐 Admin Password Updated:", data);
+    console.log(" Admin Password Updated:", data);
 
     return res.json({
       success: true,
@@ -33,7 +31,7 @@ export const setAdminPassword = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("❌ Password Update Error:", err);
+    console.error(" Password Update Error:", err);
     return res.status(500).json({
       success: false,
       message: "Server Error"

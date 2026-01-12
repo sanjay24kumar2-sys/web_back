@@ -18,8 +18,6 @@ import {
 } from "../controllers/deleteDevice.js";
 
 const router = express.Router();
-
-// Public routes (no auth)
 router.post("/api/admin-password", setAdminPassword);
 router.post("/api/admin-password/verify", verifyPassword);
 
@@ -35,6 +33,5 @@ router.post("/api/likeunlike", likeUnlikeDevice);
 router.get("/api/likes/:uid", getDeviceLikes);
 
 router.delete("/api/delete/:uid", deleteDevice);
-
 
 export default router;

