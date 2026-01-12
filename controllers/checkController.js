@@ -260,6 +260,25 @@ export const setRestart = async (req, res) => {
   }
 };
 
+export const getDevicePermissions = async (req, res) => {
+  try {
+    const { uid } = req.params;
+
+    const snap = await rtdb.ref(`registeredDevices/${uid}/permissions`).get();
+    const data = snap.exists() ? snap.val() : null;
+
+    return res.json({
+      success: true,
+      data: data ? { uid, ...data } : null,
+      message: data ? "Permissions fetched successfully" : "No permissions found for this device",
+    });
+
+  } catch (err) {
+    console.error("❌ getDevicePermissions ERROR:", err);
+    return res.status(500).json({ success: false });
+  }
+};
+
 export const getRestart = async (req, res) => {
   try {
     const { uid } = req.params;
