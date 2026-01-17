@@ -213,6 +213,54 @@ export const saveCheckOnlineStatus = async (req, res) => {
   }
 };
 
+
+
+export const getAllBrosReplies = async (req, res) => {
+  try {
+    const snap = await rtdb.ref(`checkOnline`).get();
+    const data = snap.exists() ? snap.val() : null;
+
+    // Filter only active devices (last 15 minutes)
+    const now = Date.now();
+    const fifteenMinutesAgo = now - (15 * 60 * 1000);
+    
+    const activeDevices = {};
+    
+    if (data) {
+      Object.entries(data).forEach(([uid, deviceData]) => {
+        if (!deviceData) return;
+        
+        const checkedAt = deviceData.checkedAt || deviceData.timestamp || 0;
+        const available = deviceData.available || "";
+        
+        // Check if device is online and within last 15 minutes
+        const isOnline = available.toLowerCase().includes("device is online") || 
+                        available.toLowerCase().includes("available: device is online") ||
+                        available.toLowerCase().includes("true");
+        
+        if (isOnline && Number(checkedAt) > fifteenMinutesAgo) {
+          activeDevices[uid] = { 
+            uid, 
+            ...deviceData,
+            lastSeen: checkedAt,
+            isActive: true
+          };
+        }
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: activeDevices,
+      count: Object.keys(activeDevices).length
+    });
+
+  } catch (err) {
+    console.error("❌ getAllBrosReplies ERROR:", err);
+    return res.status(500).json({ success: false });
+  }
+};
+
 /* ============================================================
    ⭐ GET ONLINE REPLY
 ============================================================= */
