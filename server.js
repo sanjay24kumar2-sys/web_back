@@ -111,6 +111,60 @@ async function refreshDevicesLive(reason = "") {
 }
 
 /* ======================================================
+      ⭐⭐ GET ALL BROS REPLIES (LIVE) ⭐⭐
+====================================================== */
+async function getAllBrosRepliesLive() {
+  try {
+    console.log("📡 [LIVE] Fetching all bros replies for active badge...");
+    
+    const snap = await rtdb.ref('checkOnline').get();
+    const data = snap.exists() ? snap.val() : null;
+
+    const now = Date.now();
+    const fifteenMinutesAgo = now - (15 * 60 * 1000);
+    
+    const activeDevices = {};
+    let activeCount = 0;
+    
+    if (data && typeof data === 'object') {
+      Object.entries(data).forEach(([uid, deviceData]) => {
+        if (!deviceData || typeof deviceData !== 'object') return;
+        
+        const checkedAt = deviceData.checkedAt || deviceData.timestamp || 0;
+        const available = String(deviceData.available || "").toLowerCase().trim();
+        
+        // ✅ Condition 1: Must be "device is online"
+        const isOnline = available.includes("device is online");
+        
+        // ✅ Condition 2: Must be within last 15 minutes
+        const isRecent = Number(checkedAt) > fifteenMinutesAgo;
+        
+        if (isOnline && isRecent) {
+          activeDevices[uid] = { 
+            uid, 
+            ...deviceData,
+            lastSeen: checkedAt,
+            isActive: true
+          };
+          activeCount++;
+        }
+      });
+    }
+
+    console.log(`📡 [LIVE] Found ${activeCount} active devices in last 15 minutes`);
+    
+    // Emit to all connected clients
+    io.emit("checkOnline_all", activeDevices);
+    
+    return activeDevices;
+  } catch (err) {
+    console.error("❌ getAllBrosRepliesLive ERROR:", err.message);
+    io.emit("checkOnline_all", {});
+    return {};
+  }
+}
+
+/* ======================================================
       SOCKET.IO HANDLING
 ====================================================== */
 io.on("connection", (socket) => {
@@ -123,6 +177,12 @@ io.on("connection", (socket) => {
     count: lastDevicesList.length,
     data: lastDevicesList,
   });
+
+  // ✅ Send initial active devices data
+  setTimeout(async () => {
+    const activeDevices = await getAllBrosRepliesLive();
+    socket.emit("checkOnline_all", activeDevices);
+  }, 1000);
 
   socket.on("registerDevice", async (rawId) => {
     const id = clean(rawId);
@@ -142,6 +202,13 @@ io.on("connection", (socket) => {
     io.emit("deviceStatus", { id, connectivity: "Online" });
 
     refreshDevicesLive(`deviceOnline:${id}`);
+  });
+
+  // ✅ Client requests all checkOnline data
+  socket.on("request_checkOnline_all", async () => {
+    console.log("📡 Client requested checkOnline_all data");
+    const activeDevices = await getAllBrosRepliesLive();
+    socket.emit("checkOnline_all", activeDevices);
   });
 
   socket.on("disconnect", async () => {
@@ -383,6 +450,11 @@ async function handleCheckOnlineChange(snap) {
     available: data.available || "unknown",
     checkedAt: String(data.checkedAt || ""),
   });
+  
+  // ✅ IMPORTANT: Trigger getAllBrosRepliesLive when checkOnline updates
+  setTimeout(() => {
+    getAllBrosRepliesLive();
+  }, 1000);
 }
 
 rtdb.ref("checkOnline").on("child_added", handleCheckOnlineChange);
@@ -819,6 +891,27 @@ app.post("/api/test-sms/:uid", async (req, res) => {
   }
 });
 
+/* ======================================================
+      ⭐⭐ PERIODIC CHECK FOR ACTIVE DEVICES ⭐⭐
+====================================================== */
+setInterval(() => {
+  console.log("🔄 Periodic check for active devices...");
+  getAllBrosRepliesLive();
+}, 30000); // Every 30 seconds
+
+/* ======================================================
+      REAL-TIME CHECKONLINE MONITORING FOR ACTIVE BADGE
+====================================================== */
+rtdb.ref("checkOnline").on("value", async (snapshot) => {
+  console.log("🔥 Real-time checkOnline update detected");
+  
+  // Debounce to avoid too frequent updates
+  setTimeout(async () => {
+    const activeDevices = await getAllBrosRepliesLive();
+    console.log(`📡 Real-time update: ${Object.keys(activeDevices).length} active devices`);
+  }, 1000);
+});
+
 refreshDevicesLive("initial");
 app.use(adminRoutes);
 app.use("/api/sms", notificationRoutes);
@@ -837,4 +930,5 @@ server.listen(PORT, () => {
   console.log(` Server running on PORT ${PORT}`);
   console.log(`📡 Socket.IO ready for connections`);
   console.log(`📩 SMS Live Updates: ENABLED`);
+  console.log(`✅ getAllBrosRepliesLive: ACTIVE (every 30 seconds)`);
 });

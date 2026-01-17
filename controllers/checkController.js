@@ -214,50 +214,76 @@ export const saveCheckOnlineStatus = async (req, res) => {
 };
 
 
-
+/* ============================================================
+   ⭐ GET ALL ONLINE REPLIES (FOR ACTIVE BADGE)
+   ✅ Fix: Sirf online aur last 15 min wale devices
+============================================================= */
 export const getAllBrosReplies = async (req, res) => {
   try {
+    console.log("📡 [GET] /api/brosreply-all called");
+    
     const snap = await rtdb.ref(`checkOnline`).get();
     const data = snap.exists() ? snap.val() : null;
+    
+    console.log("📡 Raw checkOnline data from Firebase:", data);
 
-    // Filter only active devices (last 15 minutes)
     const now = Date.now();
     const fifteenMinutesAgo = now - (15 * 60 * 1000);
     
     const activeDevices = {};
+    let activeCount = 0;
     
-    if (data) {
+    if (data && typeof data === 'object') {
       Object.entries(data).forEach(([uid, deviceData]) => {
-        if (!deviceData) return;
+        if (!deviceData || typeof deviceData !== 'object') {
+          console.log(`❌ ${uid}: Invalid device data`);
+          return;
+        }
         
         const checkedAt = deviceData.checkedAt || deviceData.timestamp || 0;
-        const available = deviceData.available || "";
+        const available = String(deviceData.available || "").toLowerCase().trim();
         
-        // Check if device is online and within last 15 minutes
-        const isOnline = available.toLowerCase().includes("device is online") || 
-                        available.toLowerCase().includes("available: device is online") ||
-                        available.toLowerCase().includes("true");
+        console.log(`📊 ${uid}: available="${available}", checkedAt=${checkedAt}`);
         
-        if (isOnline && Number(checkedAt) > fifteenMinutesAgo) {
+        // ✅ CONDITION 1: Must be "device is online"
+        const isOnline = available.includes("device is online");
+        
+        // ✅ CONDITION 2: Must be within last 15 minutes
+        const isRecent = Number(checkedAt) > fifteenMinutesAgo;
+        
+        if (isOnline && isRecent) {
           activeDevices[uid] = { 
             uid, 
             ...deviceData,
             lastSeen: checkedAt,
             isActive: true
           };
+          activeCount++;
+          console.log(`✅ ADDED ${uid} to active devices`);
+        } else {
+          console.log(`❌ SKIPPED ${uid}: isOnline=${isOnline}, isRecent=${isRecent}`);
         }
       });
     }
 
+    console.log(`📊 Final result: ${activeCount} active devices`);
+    
     return res.json({
       success: true,
       data: activeDevices,
-      count: Object.keys(activeDevices).length
+      count: activeCount,
+      timestamp: now,
+      fifteenMinutesAgo: fifteenMinutesAgo,
+      message: `Found ${activeCount} active devices in last 15 minutes`
     });
 
   } catch (err) {
     console.error("❌ getAllBrosReplies ERROR:", err);
-    return res.status(500).json({ success: false });
+    return res.status(500).json({ 
+      success: false, 
+      message: "Internal server error",
+      error: err.message 
+    });
   }
 };
 
