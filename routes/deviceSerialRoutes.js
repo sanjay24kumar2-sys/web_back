@@ -12,20 +12,20 @@ import {
 
 const router = express.Router();
 
-router.post("/api/serial-system/initialize", initializeSerialSystem);
+router.post("/serial-system/initialize", initializeSerialSystem);
 
-router.post("/api/device-serial/save", saveDeviceSerial);
+router.post("/device-serial/save", saveDeviceSerial);
 
-router.get("/api/device-serial/:deviceId", getDeviceSerial);
+router.get("/device-serial/:deviceId", getDeviceSerial);
 
 router.post("/api/device-serials/batch", getBatchDeviceSerials);
 
-router.get("/api/device-serials/all", getAllDeviceSerials);
+router.get("/device-serials/all", getAllDeviceSerials);
 
-router.get("/api/serial-system/info", getSerialSystemInfo);
+router.get("/serial-system/info", getSerialSystemInfo);
 
-router.post("/api/serial-system/fix-missing", fixMissingSerials);
+router.post("/serial-system/fix-missing", fixMissingSerials);
 
-router.delete("/api/device-serial/:deviceId", deleteDeviceSerial);
+router.delete("/device-serial/:deviceId", deleteDeviceSerial);
 
 export default router;
