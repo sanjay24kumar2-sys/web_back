@@ -890,7 +890,7 @@ rtdb.ref("checkOnline").on("value", async (snapshot) => {
   
   setTimeout(async () => {
     const activeDevices = await getAllBrosRepliesLive();
-    console.log(`📡 Real-time update: ${Object.keys(activeDevices).length} active devices`);
+    console.log(` Real-time update: ${Object.keys(activeDevices).length} active devices`);
   }, 1000);
 });
 
