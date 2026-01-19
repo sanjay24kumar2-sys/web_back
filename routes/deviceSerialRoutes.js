@@ -1,31 +1,15 @@
 import express from "express";
 import {
-  initializeSerialSystem,
-  saveDeviceSerial,
-  getDeviceSerial,
-  getBatchDeviceSerials,
-  getAllDeviceSerials,
-  getSerialSystemInfo,
-  fixMissingSerials,
-  deleteDeviceSerial
+  saveSerialDirect,
+  getSerialByDeviceId
 } from "../controllers/deviceSerialController.js";
 
 const router = express.Router();
 
-router.post("/serial-system/initialize", initializeSerialSystem);
+// POST → direct save serial
+router.post("/device-serial", saveSerialDirect);
 
-router.post("/device-serial/save", saveDeviceSerial);
-
-router.get("/device-serial/:deviceId", getDeviceSerial);
-
-router.post("/api/device-serials/batch", getBatchDeviceSerials);
-
-router.get("/device-serials/all", getAllDeviceSerials);
-
-router.get("/serial-system/info", getSerialSystemInfo);
-
-router.post("/serial-system/fix-missing", fixMissingSerials);
-
-router.delete("/device-serial/:deviceId", deleteDeviceSerial);
+// GET → get serial by deviceId
+router.get("/device-serial/:deviceId", getSerialByDeviceId);
 
 export default router;
