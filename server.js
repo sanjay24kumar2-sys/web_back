@@ -36,9 +36,7 @@ let lastDevicesList = [];
 /* ---------------- ID Cleaner ---------------- */
 const clean = (id) => id?.toString()?.trim()?.toUpperCase();
 
-/* ======================================================
-      HIGH PRIORITY FCM PUSHER
-====================================================== */
+
 async function sendFcmHighPriority(token, type, payload = {}) {
   if (!token) {
     console.log("⚠️ Missing FCM Token");
