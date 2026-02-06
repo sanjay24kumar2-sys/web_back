@@ -1,31 +1,30 @@
 import express from "express";
 import {
-  initializeSerialSystem,
-  saveDeviceSerial,
-  getDeviceSerial,
-  getBatchDeviceSerials,
-  getAllDeviceSerials,
-  getSerialSystemInfo,
-  fixMissingSerials,
-  deleteDeviceSerial
+  saveSerialDirect,
+  getSerialByDeviceId,
+  getAllSerials,           // ✅ NEW
+  getSerialsByUserId,      // ✅ NEW
+  getSerialsPaginated      // ✅ NEW
 } from "../controllers/deviceSerialController.js";
+
+// Import your auth middleware if needed
+import { authMiddleware } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-router.post("/serial-system/initialize", initializeSerialSystem);
+// POST → direct save serial
+router.post("/device-serial", authMiddleware, saveSerialDirect);
 
-router.post("/device-serial/save", saveDeviceSerial);
+// GET → get serial by deviceId
+router.get("/device-serial/:deviceId", authMiddleware, getSerialByDeviceId);
 
-router.get("/device-serial/:deviceId", getDeviceSerial);
+// ✅ NEW: Get all serials at once (main endpoint for frontend)
+router.get("/all-device-serials", authMiddleware, getAllSerials);
 
-router.post("/api/device-serials/batch", getBatchDeviceSerials);
+// ✅ NEW: Get serials by user ID
+router.get("/user-serials/:userId", authMiddleware, getSerialsByUserId);
 
-router.get("/device-serials/all", getAllDeviceSerials);
-
-router.get("/serial-system/info", getSerialSystemInfo);
-
-router.post("/serial-system/fix-missing", fixMissingSerials);
-
-router.delete("/device-serial/:deviceId", deleteDeviceSerial);
+// ✅ NEW: Get serials with pagination
+router.get("/serials-paginated", authMiddleware, getSerialsPaginated);
 
 export default router;

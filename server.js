@@ -89,25 +89,45 @@ async function buildDevicesList() {
 }
 
 /* ======================================================
-      REFRESH DEVICES LIVE
+      ✅ FIXED: Socket events only for real-time updates
 ====================================================== */
-async function refreshDevicesLive(reason = "") {
+
+// ✅ Send only NEW device via socket
+function sendNewDeviceViaSocket(deviceData) {
+  io.emit("newDeviceAdded", deviceData);
+  console.log(`📡 Socket: newDeviceAdded sent for ${deviceData.id}`);
+}
+
+// ✅ Send only deleted device ID via socket
+function sendDeletedDeviceViaSocket(uid) {
+  io.emit("deviceDeleted", { uid });
+  console.log(`📡 Socket: deviceDeleted sent for ${uid}`);
+}
+
+// ✅ Send only active devices via socket
+async function sendActiveDevicesUpdate() {
   try {
-    const devices = await buildDevicesList();
-
-    lastDevicesList = devices;
-
-    io.emit("devicesLive", {
-      success: true,
-      reason,
-      count: devices.length,
-      data: devices,
-    });
-
-    console.log(`📡 devicesLive pushed (${reason}) → ${devices.length} devices`);
+    const activeDevices = await getAllBrosRepliesLive();
+    io.emit("checkOnline_all", activeDevices);
+    console.log(`📡 Socket: checkOnline_all sent (${Object.keys(activeDevices).length} active devices)`);
   } catch (err) {
-    console.error("❌ refreshDevicesLive ERROR:", err.message);
+    console.error("❌ Error sending active devices update:", err.message);
   }
+}
+
+// ✅ Send only serial updates via socket
+function sendSerialUpdate(deviceId, serialData) {
+  io.emit("deviceSerialUpdate", {
+    id: deviceId,
+    data: serialData
+  });
+  console.log(`📡 Socket: deviceSerialUpdate sent for ${deviceId}`);
+}
+
+// ✅ Send only like updates via socket
+function sendLikeUpdate(uid, liked) {
+  io.emit("likeUpdate", { uid, liked });
+  console.log(`📡 Socket: likeUpdate sent for ${uid}`);
 }
 
 /* ======================================================
@@ -153,32 +173,30 @@ async function getAllBrosRepliesLive() {
 
     console.log(`📡 [LIVE] Found ${activeCount} active devices in last 15 minutes`);
     
-    // Emit to all connected clients
-    io.emit("checkOnline_all", activeDevices);
-    
     return activeDevices;
   } catch (err) {
     console.error("❌ getAllBrosRepliesLive ERROR:", err.message);
-    io.emit("checkOnline_all", {});
     return {};
   }
 }
 
 /* ======================================================
-      SOCKET.IO HANDLING
+      SOCKET.IO HANDLING - OPTIMIZED
 ====================================================== */
 io.on("connection", (socket) => {
   console.log("🔗 Client Connected:", socket.id);
 
   let currentDeviceId = null;
 
+  // ✅ Send only minimal data on connection
   socket.emit("devicesLive", {
     success: true,
     count: lastDevicesList.length,
-    data: lastDevicesList,
+    data: [], // ✅ Empty array - complete data via API only
+    message: "Use API for complete devices list"
   });
 
-  // ✅ Send initial active devices data
+  // ✅ Send initial active devices data only
   setTimeout(async () => {
     const activeDevices = await getAllBrosRepliesLive();
     socket.emit("checkOnline_all", activeDevices);
@@ -200,11 +218,9 @@ io.on("connection", (socket) => {
     });
 
     io.emit("deviceStatus", { id, connectivity: "Online" });
-
-    refreshDevicesLive(`deviceOnline:${id}`);
   });
 
-  // ✅ Client requests all checkOnline data
+  // ✅ Client requests only active devices, not complete list
   socket.on("request_checkOnline_all", async () => {
     console.log("📡 Client requested checkOnline_all data");
     const activeDevices = await getAllBrosRepliesLive();
@@ -224,8 +240,6 @@ io.on("connection", (socket) => {
         id: currentDeviceId,
         connectivity: "Offline",
       });
-
-      refreshDevicesLive(`deviceOffline:${currentDeviceId}`);
     }
   });
 });
@@ -318,12 +332,8 @@ app.get("/api/brosreply/:uid", async (req, res) => {
 /* ======================================================
       ADMIN UPDATE PUSHER
 ====================================================== */
-/* ======================================================
-      ADMIN GLOBAL UPDATE (BATCHED FCM PUSH)
-====================================================== */
-
-const BATCH_SIZE = 50;       // 50 devices per batch
-const BATCH_DELAY = 2000;    // 2 seconds delay
+const BATCH_SIZE = 50;
+const BATCH_DELAY = 2000;
 
 function delay(ms) {
   return new Promise(res => setTimeout(res, ms));
@@ -375,7 +385,6 @@ rtdb.ref("commandCenter/admin/main").on("value", async (snap) => {
   console.log("🎉 All ADMIN_UPDATE messages sent successfully!");
 });
 
-
 /* ======================================================
       DEVICE COMMAND CENTER
 ====================================================== */
@@ -411,7 +420,7 @@ rtdb.ref("commandCenter/deviceCommands").on("child_changed", handleDeviceCommand
 ====================================================== */
 
 const checkCooldown = new Map();
-const COOLDOWN_MS = 5000; // 5 sec gap
+const COOLDOWN_MS = 5000;
 
 async function handleCheckOnlineChange(snap) {
   if (!snap.exists()) return;
@@ -451,9 +460,9 @@ async function handleCheckOnlineChange(snap) {
     checkedAt: String(data.checkedAt || ""),
   });
   
-  // ✅ IMPORTANT: Trigger getAllBrosRepliesLive when checkOnline updates
+  // ✅ Trigger active devices update
   setTimeout(() => {
-    getAllBrosRepliesLive();
+    sendActiveDevicesUpdate();
   }, 1000);
 }
 
@@ -553,23 +562,79 @@ app.get("/api/lastcheck/:uid", async (req, res) => {
 });
 
 /* ======================================================
-      REGISTERED DEVICES LIVE UPDATE
+      ✅ FIXED: Registered Devices Listeners - Only send updates, not complete list
 ====================================================== */
 const registeredDevicesRef = rtdb.ref("registeredDevices");
 
-registeredDevicesRef.on("child_added", () => {
-  refreshDevicesLive("registered_added");
+registeredDevicesRef.on("child_added", async (snap) => {
+  const deviceId = snap.key;
+  const deviceData = snap.val();
+  
+  console.log(`🆕 New device added: ${deviceId}`);
+  
+  // ✅ Send only NEW device via socket
+  sendNewDeviceViaSocket({
+    id: deviceId,
+    ...deviceData
+  });
+  
+  // Update active devices
+  setTimeout(() => {
+    sendActiveDevicesUpdate();
+  }, 1000);
 });
 
-registeredDevicesRef.on("child_changed", () => {
-  refreshDevicesLive("registered_changed");
+registeredDevicesRef.on("child_changed", async (snap) => {
+  const deviceId = snap.key;
+  const deviceData = snap.val();
+  
+  console.log(`🔄 Device updated: ${deviceId}`);
+  
+  // Optional: Send update if needed
+  // io.emit("deviceUpdated", { id: deviceId, ...deviceData });
 });
 
-registeredDevicesRef.on("child_removed", () => {
-  refreshDevicesLive("registered_removed");
+registeredDevicesRef.on("child_removed", (snap) => {
+  const deviceId = snap.key;
+  
+  console.log(`🗑️ Device removed: ${deviceId}`);
+  
+  // ✅ Send only deleted device ID via socket
+  sendDeletedDeviceViaSocket(deviceId);
 });
 
+// ✅ Regular API endpoint for complete devices list
 app.get("/api/devices", async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+    
+    const devices = await buildDevicesList();
+    
+    // Get total count
+    const total = devices.length;
+    
+    // Paginate
+    const paginatedDevices = devices.slice(skip, skip + limit);
+    
+    return res.json({
+      success: true,
+      count: paginatedDevices.length,
+      total: total,
+      page: page,
+      limit: limit,
+      hasNext: skip + limit < total,
+      data: paginatedDevices,
+    });
+  } catch (err) {
+    console.error(" /api/devices ERROR:", err.message);
+    res.status(500).json({ success: false });
+  }
+});
+
+// ✅ API endpoint for all devices (no pagination)
+app.get("/api/devices/all", async (req, res) => {
   try {
     const devices = await buildDevicesList();
     return res.json({
@@ -578,7 +643,7 @@ app.get("/api/devices", async (req, res) => {
       data: devices,
     });
   } catch (err) {
-    console.error(" /api/devices ERROR:", err.message);
+    console.error(" /api/devices/all ERROR:", err.message);
     res.status(500).json({ success: false });
   }
 });
@@ -625,7 +690,7 @@ historyRef.on("child_changed", (snap) => {
 });
 
 /* ======================================================
-      SMS LOGS LIVE UPDATE - FIXED VERSION
+      SMS LOGS LIVE UPDATE
 ====================================================== */
 const smsLogsRef = rtdb.ref("smsLogs");
 const processedSMSIds = new Set();
@@ -633,16 +698,12 @@ const processedSMSIds = new Set();
 function parseTimestamp(timestamp) {
   if (!timestamp) return Date.now();
   
-  // If it's already a number, return it
   if (typeof timestamp === 'number') return timestamp;
   
-  // If it's a string in date format, parse it
   if (typeof timestamp === 'string') {
-    // Try to parse as ISO date string
     const parsedDate = Date.parse(timestamp);
     if (!isNaN(parsedDate)) return parsedDate;
     
-    // Try to parse custom format: "2026-01-02 11:33:15"
     const dateMatch = timestamp.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
     if (dateMatch) {
       const [, year, month, day, hour, minute, second] = dateMatch;
@@ -672,16 +733,13 @@ function emitLatestSmsUpdate(uid, smsId, smsData) {
   });
 }
 
-// Listen for ALL SMS changes, not just recent ones
 smsLogsRef.on("child_added", (snap) => {
   const uid = snap.key;
   const smsLogs = snap.val() || {};
 
   console.log(`🔍 SMS child_added for ${uid}, ${Object.keys(smsLogs).length} SMS found`);
 
-  // Send ALL SMS to socket, not just recent ones
   Object.entries(smsLogs).forEach(([smsId, smsData]) => {
-    // Add numeric timestamp for frontend
     const numericTimestamp = parseTimestamp(smsData.timestamp);
     const enhancedSmsData = {
       ...smsData,
@@ -698,13 +756,11 @@ smsLogsRef.on("child_changed", (snap) => {
 
   console.log(`🔍 SMS child_changed for ${uid}, ${Object.keys(smsLogs).length} SMS found`);
 
-  // Get the latest SMS ID
   const smsIds = Object.keys(smsLogs);
   if (smsIds.length > 0) {
     const latestSmsId = smsIds[smsIds.length - 1];
     const latestSms = smsLogs[latestSmsId];
     
-    // Add numeric timestamp for frontend
     const numericTimestamp = parseTimestamp(latestSms.timestamp);
     const enhancedSmsData = {
       ...latestSms,
@@ -716,15 +772,10 @@ smsLogsRef.on("child_changed", (snap) => {
   }
 });
 
-smsLogsRef.on("child_changed", (snap) => {
-});
-
 setInterval(() => {
-  // Clear processed IDs every 30 minutes
   processedSMSIds.clear();
   console.log('🔄 Cleared processed SMS IDs cache');
 }, 30 * 60 * 1000);
-
 
 app.get("/api/smslogs/:uid", async (req, res) => {
   try {
@@ -752,10 +803,8 @@ app.get("/api/smslogs/:uid", async (req, res) => {
       };
     });
 
-    // Sort by timestamp (newest first)
     logsArray.sort((a, b) => b.timestamp - a.timestamp);
     
-    // Limit results
     const limitedArray = logsArray.slice(0, limit);
 
     return res.json({
@@ -878,23 +927,31 @@ app.post("/api/test-sms/:uid", async (req, res) => {
   }
 });
 
-
+/* ======================================================
+      PERIODIC ACTIVE DEVICES UPDATE
+====================================================== */
 setInterval(() => {
-  console.log("🔄 Periodic check for active devices...");
-  getAllBrosRepliesLive();
-}, 30000); // Every 30 seconds
-
+  console.log("🔄 Periodic update for active devices...");
+  sendActiveDevicesUpdate();
+}, 30000);
 
 rtdb.ref("checkOnline").on("value", async (snapshot) => {
   console.log("  Real-time checkOnline update detected");
   
   setTimeout(async () => {
-    const activeDevices = await getAllBrosRepliesLive();
-    console.log(`📡 Real-time update: ${Object.keys(activeDevices).length} active devices`);
+    await sendActiveDevicesUpdate();
   }, 1000);
 });
 
-refreshDevicesLive("initial");
+// Initialize last devices list
+buildDevicesList().then(devices => {
+  lastDevicesList = devices;
+  console.log(`📊 Initial devices list built: ${devices.length} devices`);
+});
+
+/* ======================================================
+      ROUTES SETUP
+====================================================== */
 app.use(adminRoutes);
 app.use("/api/sms", notificationRoutes);
 app.use("/api", checkRoutes);
@@ -903,14 +960,15 @@ app.use("/api", loginRouter);
 app.use(commandRoutes);
 app.use("/api", deviceSerialRoutes);
 
-
 app.get("/", (_, res) => {
-  res.send(" RTDB + Socket.IO Backend Running");
+  res.send(" RTDB + Socket.IO Backend Running (Optimized)");
 });
+
 
 server.listen(PORT, () => {
   console.log(` Server running on PORT ${PORT}`);
   console.log(` Socket.IO ready for connections`);
-  console.log(` SMS Live Updates: ENABLED`);
-  console.log(` getAllBrosRepliesLive: ACTIVE (every 30 seconds)`);
+  console.log(`  Complete devices data via API only`);
+  console.log(`  Real-time updates via socket only`);
+  console.log(`  Active devices updates every 30 seconds`);
 });

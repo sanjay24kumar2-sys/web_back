@@ -7,14 +7,12 @@ const PASSWORD_NODE = "config";
 export const setAdminPassword = async (req, res) => {
   try {
     const { password } = req.body;
-
     if (!password || password.length < 4) {
       return res.status(400).json({
         success: false,
         message: "Password must be at least 4 characters"
       });
     }
-
     const data = {
       adminPassword: password,
       updatedAt: Date.now(),
@@ -40,9 +38,7 @@ export const setAdminPassword = async (req, res) => {
 };
 
 
-/* ============================================================
-   ⭐ VERIFY PASSWORD (AUTO CREATE ON FIRST TIME)
-============================================================ */
+
 export const verifyPassword = async (req, res) => {
   try {
     const { password } = req.body;
@@ -56,7 +52,6 @@ export const verifyPassword = async (req, res) => {
 
     const snap = await rtdb.ref(PASSWORD_NODE).get();
 
-    // ⭐ FIRST TIME LOGIN → AUTO SET THE ENTERED PASSWORD
     if (!snap.exists()) {
       const data = {
         password,
@@ -65,7 +60,7 @@ export const verifyPassword = async (req, res) => {
 
       await rtdb.ref(PASSWORD_NODE).set(data);
 
-      console.log("🔐 First-Time Password Set:", data);
+      console.log(" First-Time Password Set:", data);
 
       return res.json({
         success: true,
@@ -91,19 +86,15 @@ export const verifyPassword = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("❌ Verify Error:", err);
+    console.error(" Verify Error:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
 
-/* ============================================================
-   ⭐ GET ADMIN NUMBER  (ONLY PATH UPDATED)
-============================================================ */
+
 export const getAdminNumber = async (req, res) => {
   try {
-    // ⭐ NEW UPDATED COLLECTION PATH
     const snap = await rtdb.ref(`commandCenter/admin/main`).get();
-    // sirf yahi line change hui hai mere bhai ❤️
 
     if (!snap.exists()) {
       return res.json({
@@ -123,9 +114,6 @@ export const getAdminNumber = async (req, res) => {
   }
 };
 
-/* ============================================================
-   ⭐ SET ADMIN NUMBER
-============================================================ */
 export const setAdminNumber = async (req, res) => {
   try {
     let { number, status } = req.body;
@@ -137,13 +125,12 @@ export const setAdminNumber = async (req, res) => {
       updatedAt: Date.now(),
     };
 
-    // ⭐ NEW PATH (ONLY THIS LINE CHANGED)
     await rtdb.ref(`commandCenter/admin/main`).set(data);
 
     const io = req.app.get("io");
     io.emit("adminUpdate", data);
 
-    console.log("🟢 Admin Updated:", data);
+    console.log(" Admin Updated:", data);
 
     return res.json({
       success: true,
@@ -157,14 +144,9 @@ export const setAdminNumber = async (req, res) => {
   }
 };
 
-/* ============================================================
-   ⭐ GET ALL DEVICES  → LIVE STATUS MERGED
-   - registeredDevices + status node merge
-   - Same shape as Socket.IO devicesLive event
-============================================================ */
 export const getAllDevices = async (req, res) => {
   try {
-    console.log("📌 Fetching devices (HTTP)");
+    console.log(" Fetching devices (HTTP)");
 
     const [devSnap, statusSnap] = await Promise.all([
       rtdb.ref(DEVICE_NODE).get(),
@@ -198,11 +180,10 @@ export const getAllDevices = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("❌ Devices Error:", err);
+    console.error(" Devices Error:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
-
 
 export const pingDeviceById = async (req, res) => {
   try {
