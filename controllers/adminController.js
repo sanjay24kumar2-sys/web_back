@@ -13,6 +13,7 @@ export const setAdminPassword = async (req, res) => {
         message: "Password must be at least 4 characters"
       });
     }
+    
     const data = {
       adminPassword: password,
       updatedAt: Date.now(),
